@@ -1,0 +1,137 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'dashboard' }) %>
+<div class="container">
+  <h1>Overview</h1>
+
+  <% if (lowEmpty || lowFilled) { %>
+    <div class="card" style="border-color:#f59e0b; background:#fffbeb;">
+      <strong style="color:#92400e;">⚠ Low stock warning</strong>
+      <ul style="margin:8px 0 0; padding-left:18px; color:#92400e;">
+        <% if (lowEmpty) { %><li>Empty bottles: <%= emptyStock %> left (below your threshold of <%= lowStockEmptyThreshold %>)</li><% } %>
+        <% if (lowFilled) { %><li>Filled bottles ready to deliver: <%= filledStock %> left (below your threshold of <%= lowStockFilledThreshold %>)</li><% } %>
+      </ul>
+    </div>
+  <% } %>
+
+  <div class="grid grid-3">
+    <div class="card stat">
+      <div class="num"><%= emptyStock %></div>
+      <div class="label">Empty bottles in stock</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= filledStock %></div>
+      <div class="label">Filled bottles ready to deliver</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= totalRevenue.toFixed(0) %></div>
+      <div class="label">Total revenue (all deliveries)</div>
+    </div>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card stat">
+      <div class="num"><%= totalWages.toFixed(0) %></div>
+      <div class="label">Total wages paid</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= (totalExpenses + totalBottleCost).toFixed(0) %></div>
+      <div class="label">Total other expenses</div>
+    </div>
+    <div class="card stat">
+      <div class="num" style="color: <%= netEstimate >= 0 ? '#059669' : '#dc2626' %>"><%= netEstimate.toFixed(0) %></div>
+      <div class="label">Estimated net (revenue - wages - expenses)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Today's attendance (<%= today %>)</h2>
+    <% if (todaysAttendance.length === 0) { %>
+      <p class="muted">No workers have logged attendance yet today.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Worker</th><th>Present</th><th>Bottles filled</th><th>Wage</th></tr></thead>
+        <tbody>
+        <% todaysAttendance.forEach(a => { %>
+          <tr>
+            <td data-label="Worker"><%= a.name %></td>
+            <td data-label="Present"><span class="badge <%= a.present ? 'badge-green' : 'badge-red' %>"><%= a.present ? 'Present' : 'Absent' %></span></td>
+            <td data-label="Bottles filled"><%= a.bottles_filled %></td>
+            <td data-label="Wage"><%= a.wage_amount.toFixed(0) %></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <div class="top-actions">
+      <h2 style="margin:0">Recent deliveries</h2>
+      <a href="/admin/deliveries/new" class="btn btn-sm">+ New delivery</a>
+    </div>
+    <% if (recentDeliveries.length === 0) { %>
+      <p class="muted">No deliveries recorded yet.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Date</th><th>Client</th><th>Bottles</th><th>Total</th><th>Invoice</th></tr></thead>
+        <tbody>
+        <% recentDeliveries.forEach(d => { %>
+          <tr>
+            <td data-label="Date"><%= d.date %></td>
+            <td data-label="Client"><%= d.client_name %></td>
+            <td data-label="Bottles"><%= d.bottles_count %></td>
+            <td data-label="Total"><%= d.total_amount.toFixed(0) %></td>
+            <td data-label="Invoice"><%= d.invoice_number %></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <h2>Browser stock alerts</h2>
+    <p class="muted" style="margin-top:-6px">
+      Turn this on once per device (laptop or phone) and this dashboard will pop up a
+      system notification when stock falls below the thresholds you set in Settings —
+      even if this tab is in the background. Free, no SMS/email service involved.
+    </p>
+    <button id="enable-alerts-btn" class="btn btn-secondary">Enable low-stock alerts on this device</button>
+    <span id="alerts-status" class="muted" style="margin-left:10px;"></span>
+  </div>
+</div>
+
+<script>
+  const lowEmpty = <%= lowEmpty ? 'true' : 'false' %>;
+  const lowFilled = <%= lowFilled ? 'true' : 'false' %>;
+  const emptyStock = <%= emptyStock %>;
+  const filledStock = <%= filledStock %>;
+
+  const statusEl = document.getElementById('alerts-status');
+  function reflectStatus() {
+    if (!('Notification' in window)) { statusEl.textContent = 'Not supported on this browser.'; return; }
+    if (Notification.permission === 'granted') statusEl.textContent = 'Enabled on this device.';
+    else if (Notification.permission === 'denied') statusEl.textContent = 'Blocked in browser settings.';
+    else statusEl.textContent = 'Not enabled yet.';
+  }
+  reflectStatus();
+
+  document.getElementById('enable-alerts-btn').addEventListener('click', () => {
+    if (!('Notification' in window)) return;
+    Notification.requestPermission().then(reflectStatus);
+  });
+
+  // Fire at most one notification per calendar day per device to avoid being annoying.
+  if ('Notification' in window && Notification.permission === 'granted' && (lowEmpty || lowFilled)) {
+    const today = new Date().toISOString().slice(0, 10);
+    const lastAlert = localStorage.getItem('crystalDrinksLastStockAlert');
+    if (lastAlert !== today) {
+      const lines = [];
+      if (lowEmpty) lines.push(`Empty bottles: ${emptyStock} left`);
+      if (lowFilled) lines.push(`Filled bottles: ${filledStock} left`);
+      new Notification('Crystal Drinks — low stock', { body: lines.join(' · ') });
+      localStorage.setItem('crystalDrinksLastStockAlert', today);
+    }
+  }
+</script>
+<%- include('../partials/footer') %>

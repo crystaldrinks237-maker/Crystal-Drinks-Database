@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Crystal Drinks</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <div class="login-box">
+      <h1>💧 Crystal Drinks</h1>
+      <p class="muted" style="text-align:center;margin-top:-8px;margin-bottom:18px;">Plant management dashboard</p>
+      <% if (error) { %><div class="error"><%= error %></div><% } %>
+      <form method="POST" action="/login">
+        <div class="field">
+          <label>Username</label>
+          <input type="text" name="username" required autofocus>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" name="password" required>
+        </div>
+        <button type="submit" class="btn" style="width:100%">Log In</button>
+      </form>
+    </div>
+  </div>
+</body>
+</html>

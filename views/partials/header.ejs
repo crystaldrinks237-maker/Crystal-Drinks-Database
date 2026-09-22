@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Crystal Drinks</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="brand">💧 Crystal Drinks</div>
+  <div class="userinfo">
+    <%= user.name %> (<%= user.role %>) &nbsp;
+    <form method="POST" action="/logout" style="display:inline">
+      <button type="submit" class="btn btn-sm btn-secondary">Logout</button>
+    </form>
+  </div>
+</div>

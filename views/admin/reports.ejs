@@ -1,0 +1,32 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'reports' }) %>
+<div class="container">
+  <h1>Monthly reports</h1>
+  <div class="card">
+    <p class="muted" style="margin-top:0">
+      A one-page PDF summary for any month you've recorded data in: revenue, wages,
+      expenses, stock, and a per-worker breakdown. Open it in your browser, then
+      print or save as PDF.
+    </p>
+    <% if (months.length === 0) { %>
+      <p class="muted">No data recorded yet — reports will appear here once you log
+        some attendance, deliveries, or expenses.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Month</th><th></th></tr></thead>
+        <tbody>
+        <% months.forEach(ym => {
+             const [y, m] = ym.split('-');
+             const label = new Date(`${ym}-01T00:00:00`).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        %>
+          <tr>
+            <td data-label="Month"><%= label %></td>
+            <td data-label=""><a class="btn btn-sm" target="_blank" href="/admin/reports/<%= y %>/<%= parseInt(m,10) %>/pdf">View / download PDF</a></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

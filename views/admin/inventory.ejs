@@ -1,0 +1,101 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'inventory' }) %>
+<div class="container">
+  <h1>Inventory</h1>
+
+  <div class="grid grid-3">
+    <div class="card stat">
+      <div class="num"><%= emptyStock %></div>
+      <div class="label">Empty bottles in stock (all types)</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= filledStock %></div>
+      <div class="label">Filled bottles ready to deliver (all types)</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Stock by type &amp; quality</h2>
+    <table>
+      <thead><tr><th>Type</th><th>Quality</th><th>Empty stock</th><th>Filled stock</th></tr></thead>
+      <tbody>
+      <% byVariant.forEach(v => { %>
+        <tr>
+          <td data-label="Type"><%= v.type_name %><%= v.active ? '' : ' (inactive)' %></td>
+          <td data-label="Quality"><%= v.quality_name %></td>
+          <td data-label="Empty stock"><%= v.emptyStock %></td>
+          <td data-label="Filled stock"><%= v.filledStock %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <% if (byVariant.length === 0) { %><p class="muted">Add bottle types and qualities under Products first.</p><% } %>
+  </div>
+
+  <div class="card">
+    <h2>Record empty bottle purchase</h2>
+    <p class="muted" style="margin-top:-6px">Filled stock automatically goes down as workers log bottles filled each day.</p>
+    <form method="POST" action="/admin/inventory/purchase">
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= new Date().toISOString().slice(0,10) %>" required>
+        </div>
+        <div class="field">
+          <label>Type / Quality</label>
+          <select name="variant_id" required>
+            <% variantsForPurchase.forEach(v => { %>
+              <option value="<%= v.id %>"><%= v.type_name %> / <%= v.quality_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantity purchased</label>
+          <input type="number" name="quantity" min="1" required>
+        </div>
+        <div class="field">
+          <label>Total cost</label>
+          <input type="number" step="0.01" name="cost_total" required>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Supplier (optional)</label>
+          <input type="text" name="supplier">
+        </div>
+        <div class="field">
+          <label>Notes (optional)</label>
+          <input type="text" name="notes">
+        </div>
+      </div>
+      <button type="submit" class="btn">Add purchase</button>
+    </form>
+    <% if (variantsForPurchase.length === 0) { %>
+      <p class="muted">No active bottle types yet - add them under Products first.</p>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <div class="top-actions">
+      <h2 style="margin:0">Purchase history</h2>
+      <a href="/admin/inventory/export.csv" class="btn btn-sm btn-secondary">Export (CSV)</a>
+    </div>
+    <table>
+      <thead><tr><th>Date</th><th>Type</th><th>Quality</th><th>Quantity</th><th>Cost</th><th>Supplier</th></tr></thead>
+      <tbody>
+      <% purchases.forEach(p => { %>
+        <tr>
+          <td data-label="Date"><%= p.date %></td>
+          <td data-label="Type"><%= p.type_name || '-' %></td>
+          <td data-label="Quality"><%= p.quality_name || '-' %></td>
+          <td data-label="Quantity"><%= p.quantity %></td>
+          <td data-label="Cost"><%= p.cost_total.toFixed(0) %></td>
+          <td data-label="Supplier"><%= p.supplier || '-' %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <% if (purchases.length === 0) { %><p class="muted">No purchases recorded yet.</p><% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

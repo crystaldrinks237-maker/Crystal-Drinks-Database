@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'attendance' }) %>
+<div class="container">
+  <h1>Attendance &amp; Production</h1>
+  <div class="card">
+    <form method="GET" action="/admin/attendance" class="row" style="align-items:flex-end">
+      <div class="field">
+        <label>Date</label>
+        <input type="date" name="date" value="<%= date %>" onchange="this.form.submit()">
+      </div>
+    </form>
+  </div>
+  <div class="top-actions">
+    <a href="/admin/attendance/entry?date=<%= date %>" class="btn">+ Add / edit an entry</a>
+    <a href="/admin/attendance/export.csv" class="btn btn-sm btn-secondary">Export all attendance (CSV)</a>
+  </div>
+
+  <div class="card">
+    <h2><%= date %></h2>
+    <% if (rows.length === 0) { %>
+      <p class="muted">No attendance logged for this date yet.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Worker</th><th>Present</th><th>Bottles filled (by type/quality)</th><th>Wage</th><th>Logged by</th><th></th></tr></thead>
+        <tbody>
+        <% rows.forEach(a => { %>
+          <tr>
+            <td data-label="Worker"><%= a.name %></td>
+            <td data-label="Present"><span class="badge <%= a.present ? 'badge-green' : 'badge-red' %>"><%= a.present ? 'Present' : 'Absent' %></span></td>
+            <td data-label="Bottles filled"><%= a.breakdown || ('Total: ' + a.bottles_filled) %></td>
+            <td data-label="Wage"><%= a.wage_amount.toFixed(0) %></td>
+            <td data-label="Logged by"><span class="badge <%= a.created_by === 'admin' ? 'badge-red' : 'badge-green' %>"><%= a.created_by %></span></td>
+            <td data-label=""><a class="btn btn-sm btn-secondary" href="/admin/attendance/entry?date=<%= date %>&user_id=<%= a.user_id %>">Edit</a></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

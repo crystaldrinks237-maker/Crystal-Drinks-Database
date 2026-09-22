@@ -1,0 +1,26 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'workers' }) %>
+<div class="container">
+  <div class="top-actions">
+    <h1 style="margin:0">Workers</h1>
+    <a href="/admin/workers/new" class="btn">+ Add worker</a>
+  </div>
+  <div class="card">
+    <table>
+      <thead><tr><th>Name</th><th>Username</th><th>Daily wage</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      <% workers.forEach(w => { %>
+        <tr>
+          <td data-label="Name"><%= w.name %></td>
+          <td data-label="Username"><%= w.username %></td>
+          <td data-label="Daily wage"><%= w.daily_wage %></td>
+          <td data-label="Status"><span class="badge <%= w.active ? 'badge-green' : 'badge-red' %>"><%= w.active ? 'Active' : 'Disabled' %></span></td>
+          <td data-label=""><a href="/admin/workers/<%= w.id %>/edit" class="btn btn-sm btn-secondary">Edit</a></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <% if (workers.length === 0) { %><p class="muted">No workers added yet.</p><% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

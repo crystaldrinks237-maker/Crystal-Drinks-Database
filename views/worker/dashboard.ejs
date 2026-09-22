@@ -1,0 +1,61 @@
+<%- include('../partials/header') %>
+<div class="container">
+  <h1>Hi, <%= user.name %> 👋</h1>
+
+  <div class="card" style="max-width:500px">
+    <h2>Today (<%= today %>)</h2>
+    <form method="POST" action="/worker/attendance">
+      <input type="hidden" name="date" value="<%= today %>">
+      <div class="field">
+        <label><input type="checkbox" name="present" style="width:auto;display:inline-block"
+          <%= (!todayEntry || todayEntry.present) ? 'checked' : '' %>> I was present today</label>
+      </div>
+
+      <label>Bottles filled today, by type &amp; quality</label>
+      <% if (variants.length === 0) { %>
+        <p class="muted">No bottle types have been set up yet - ask the admin to add them in Products.</p>
+      <% } else { %>
+        <table style="margin-bottom:12px">
+          <thead><tr><th>Type</th><th>Quality</th><th>Quantity</th></tr></thead>
+          <tbody>
+          <% variants.forEach(v => { %>
+            <tr>
+              <td data-label="Type"><%= v.type_name %></td>
+              <td data-label="Quality"><%= v.quality_name %></td>
+              <td data-label="Quantity">
+                <input type="number" name="variant_<%= v.id %>" min="0"
+                  value="<%= productionMap[v.id] || 0 %>" style="max-width:100px">
+              </td>
+            </tr>
+          <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+
+      <div class="field">
+        <label>Notes (optional)</label>
+        <input type="text" name="notes" value="<%= todayEntry ? (todayEntry.notes || '') : '' %>">
+      </div>
+      <button type="submit" class="btn"><%= todayEntry ? 'Update today\'s entry' : 'Submit today\'s entry' %></button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>My recent history</h2>
+    <table>
+      <thead><tr><th>Date</th><th>Present</th><th>Bottles filled (total)</th><th>Wage</th></tr></thead>
+      <tbody>
+      <% history.forEach(h => { %>
+        <tr>
+          <td data-label="Date"><%= h.date %></td>
+          <td data-label="Present"><span class="badge <%= h.present ? 'badge-green' : 'badge-red' %>"><%= h.present ? 'Present' : 'Absent' %></span></td>
+          <td data-label="Bottles filled (total)"><%= h.bottles_filled %></td>
+          <td data-label="Wage"><%= h.wage_amount.toFixed(0) %></td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <% if (history.length === 0) { %><p class="muted">No entries yet.</p><% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

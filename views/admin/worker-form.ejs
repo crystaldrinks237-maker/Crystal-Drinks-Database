@@ -1,0 +1,47 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'workers' }) %>
+<div class="container">
+  <h1><%= worker ? 'Edit worker' : 'Add worker' %></h1>
+  <div class="card" style="max-width:500px">
+    <% if (error) { %><div class="error"><%= error %></div><% } %>
+    <form method="POST" action="<%= worker ? '/admin/workers/' + worker.id : '/admin/workers' %>">
+      <div class="field">
+        <label>Full name</label>
+        <input type="text" name="name" value="<%= worker ? worker.name : '' %>" required>
+      </div>
+      <% if (!worker) { %>
+        <div class="field">
+          <label>Username (used to log in)</label>
+          <input type="text" name="username" required>
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" name="password" required>
+        </div>
+      <% } else { %>
+        <div class="field">
+          <label>Username</label>
+          <input type="text" value="<%= worker.username %>" disabled>
+        </div>
+        <div class="field">
+          <label>Reset password (leave blank to keep current)</label>
+          <input type="password" name="new_password">
+        </div>
+      <% } %>
+      <div class="field">
+        <label>Daily wage (used when wage mode = per day)</label>
+        <input type="number" step="0.01" name="daily_wage" value="<%= worker ? worker.daily_wage : '0' %>">
+      </div>
+      <% if (worker) { %>
+        <div class="field">
+          <label><input type="checkbox" name="active" style="width:auto;display:inline-block" <%= worker.active ? 'checked' : '' %>> Account active</label>
+        </div>
+      <% } %>
+      <div class="actions">
+        <button type="submit" class="btn">Save</button>
+        <a href="/admin/workers" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>

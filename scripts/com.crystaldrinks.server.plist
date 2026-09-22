@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.crystaldrinks.server</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <!-- IMPORTANT: replace both paths below with your actual paths, see README/AUTOSTART.md -->
+        <string>/usr/local/bin/node</string>
+        <string>/REPLACE/WITH/FULL/PATH/TO/crystal-drinks/server.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/REPLACE/WITH/FULL/PATH/TO/crystal-drinks</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/crystal-drinks.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/crystal-drinks.err.log</string>
+</dict>
+</plist>

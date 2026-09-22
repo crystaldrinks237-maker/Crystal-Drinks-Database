@@ -1,0 +1,75 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'attendance' }) %>
+<div class="container">
+  <h1><%= existing ? 'Edit attendance entry' : 'Add attendance entry' %></h1>
+
+  <div class="card" style="max-width:100%">
+    <% if (!userId) { %>
+      <!-- Step 1: pick which worker/date before showing the production table -->
+      <form method="GET" action="/admin/attendance/entry" class="row" style="align-items:flex-end">
+        <div class="field">
+          <label>Worker</label>
+          <select name="user_id" required>
+            <option value="">Select a worker...</option>
+            <% workers.forEach(w => { %>
+              <option value="<%= w.id %>"><%= w.name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= date %>" required>
+        </div>
+        <button type="submit" class="btn">Continue</button>
+      </form>
+    <% } else { %>
+      <form method="POST" action="/admin/attendance/entry">
+        <input type="hidden" name="user_id" value="<%= userId %>">
+        <input type="hidden" name="date" value="<%= date %>">
+
+        <p class="muted">
+          Worker: <strong><%= workers.find(w => w.id == userId) ? workers.find(w => w.id == userId).name : ('#' + userId) %></strong>
+          &nbsp;|&nbsp; Date: <strong><%= date %></strong>
+          &nbsp; <a href="/admin/attendance/entry?date=<%= date %>">(change)</a>
+        </p>
+
+        <div class="field">
+          <label><input type="checkbox" name="present" style="width:auto;display:inline-block"
+            <%= (!existing || existing.present) ? 'checked' : '' %>> Present that day</label>
+        </div>
+
+        <label>Bottles filled, by type &amp; quality</label>
+        <% if (variants.length === 0) { %>
+          <p class="muted">No bottle types set up yet - add them under Products first.</p>
+        <% } else { %>
+          <table style="margin-bottom:12px">
+            <thead><tr><th>Type</th><th>Quality</th><th>Quantity</th></tr></thead>
+            <tbody>
+            <% variants.forEach(v => { %>
+              <tr>
+                <td data-label="Type"><%= v.type_name %><%= v.active === 0 ? ' (inactive)' : '' %></td>
+                <td data-label="Quality"><%= v.quality_name %></td>
+                <td data-label="Quantity">
+                  <input type="number" name="variant_<%= v.id %>" min="0"
+                    value="<%= productionMap[v.id] || 0 %>" style="max-width:100px">
+                </td>
+              </tr>
+            <% }) %>
+            </tbody>
+          </table>
+        <% } %>
+
+        <div class="field">
+          <label>Notes (optional)</label>
+          <input type="text" name="notes" value="<%= existing ? (existing.notes || '') : '' %>">
+        </div>
+
+        <div class="actions">
+          <button type="submit" class="btn"><%= existing ? 'Update entry' : 'Save entry' %></button>
+          <a href="/admin/attendance?date=<%= date %>" class="btn btn-secondary">Cancel</a>
+        </div>
+      </form>
+    <% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

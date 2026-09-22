@@ -1,0 +1,71 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'products' }) %>
+<div class="container">
+  <h1>Bottle Types &amp; Qualities</h1>
+  <p class="muted" style="margin-top:-10px">
+    Every Type x Quality combination becomes a "variant" automatically - that's what you'll
+    pick from when logging production, purchases, and deliveries. Turn off any combination
+    you don't actually use with the checkbox in the Variants list below.
+  </p>
+
+  <div class="grid" style="grid-template-columns: 1fr 1fr; gap:16px;">
+    <div class="card">
+      <h2>Types</h2>
+      <% types.forEach(t => { %>
+        <form method="POST" action="/admin/products/types/<%= t.id %>" class="row" style="align-items:center;margin-bottom:8px">
+          <div class="field" style="flex:2;margin-bottom:0">
+            <input type="text" name="name" value="<%= t.name %>">
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;width:auto;margin-bottom:0">
+            <input type="checkbox" name="active" style="width:auto" <%= t.active ? 'checked' : '' %>> Active
+          </label>
+          <button type="submit" class="btn btn-sm">Save</button>
+        </form>
+      <% }) %>
+      <form method="POST" action="/admin/products/types" class="row" style="align-items:flex-end;margin-top:14px">
+        <div class="field">
+          <label>Add a new type</label>
+          <input type="text" name="name" placeholder="e.g. 19L Cooler" required>
+        </div>
+        <button type="submit" class="btn">+ Add type</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Qualities</h2>
+      <% qualities.forEach(q => { %>
+        <form method="POST" action="/admin/products/qualities/<%= q.id %>" class="row" style="align-items:center;margin-bottom:8px">
+          <div class="field" style="flex:2;margin-bottom:0">
+            <input type="text" name="name" value="<%= q.name %>">
+          </div>
+          <label style="display:flex;align-items:center;gap:6px;width:auto;margin-bottom:0">
+            <input type="checkbox" name="active" style="width:auto" <%= q.active ? 'checked' : '' %>> Active
+          </label>
+          <button type="submit" class="btn btn-sm">Save</button>
+        </form>
+      <% }) %>
+      <form method="POST" action="/admin/products/qualities" class="row" style="align-items:flex-end;margin-top:14px">
+        <div class="field">
+          <label>Add a new quality</label>
+          <input type="text" name="name" placeholder="e.g. Export Grade" required>
+        </div>
+        <button type="submit" class="btn">+ Add quality</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Variants (Type x Quality)</h2>
+    <% variants.forEach(v => { %>
+      <form method="POST" action="/admin/products/variants/<%= v.id %>" class="row" style="align-items:center;margin-bottom:6px">
+        <div style="flex:2"><%= v.type_name %> / <%= v.quality_name %></div>
+        <label style="display:flex;align-items:center;gap:6px;width:auto;margin-bottom:0">
+          <input type="checkbox" name="active" style="width:auto" <%= v.active ? 'checked' : '' %>> Used in forms
+        </label>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </form>
+    <% }) %>
+    <% if (variants.length === 0) { %><p class="muted">Add at least one type and one quality above.</p><% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

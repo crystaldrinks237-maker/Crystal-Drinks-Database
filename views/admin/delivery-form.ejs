@@ -1,0 +1,60 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'deliveries' }) %>
+<div class="container">
+  <h1>New delivery</h1>
+  <div class="card" style="max-width:700px">
+    <% if (typeof error !== 'undefined' && error) { %><div class="error"><%= error %></div><% } %>
+    <form method="POST" action="/admin/deliveries">
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= new Date().toISOString().slice(0,10) %>" required>
+        </div>
+        <div class="field">
+          <label>Client / company name</label>
+          <input type="text" name="client_name" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Delivery destination / address (optional)</label>
+        <input type="text" name="destination">
+      </div>
+
+      <label>Bottles in this delivery, by type &amp; quality</label>
+      <p class="muted" style="margin-top:-4px">Leave quantity at 0 for anything not included in this delivery.</p>
+      <% if (variants.length === 0) { %>
+        <p class="muted">No active bottle types yet - add them under Products first.</p>
+      <% } else { %>
+        <table style="margin-bottom:12px">
+          <thead><tr><th>Type</th><th>Quality</th><th>Quantity</th><th>Price per bottle</th></tr></thead>
+          <tbody>
+          <% variants.forEach(v => { %>
+            <tr>
+              <td data-label="Type"><%= v.type_name %></td>
+              <td data-label="Quality"><%= v.quality_name %></td>
+              <td data-label="Quantity"><input type="number" name="qty_<%= v.id %>" min="0" value="0" style="max-width:100px"></td>
+              <td data-label="Price per bottle"><input type="number" step="0.01" name="price_<%= v.id %>" min="0" value="0" style="max-width:120px"></td>
+            </tr>
+          <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+
+      <div class="row">
+        <div class="field">
+          <label>Petrol cost for this trip (optional)</label>
+          <input type="number" step="0.01" name="petrol_cost" value="0">
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes (optional, shown on invoice)</label>
+        <textarea name="notes" rows="2"></textarea>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn">Save delivery &amp; generate invoice</button>
+        <a href="/admin/deliveries" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>

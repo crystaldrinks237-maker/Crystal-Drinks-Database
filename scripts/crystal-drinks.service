@@ -1,0 +1,12 @@
+[Unit]
+Description=Crystal Drinks local dashboard
+After=network.target
+
+[Service]
+# IMPORTANT: replace both paths below with your actual paths, see README/AUTOSTART.md
+WorkingDirectory=/REPLACE/WITH/FULL/PATH/TO/crystal-drinks
+ExecStart=/usr/bin/node /REPLACE/WITH/FULL/PATH/TO/crystal-drinks/server.js
+Restart=on-failure
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,33 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'deliveries' }) %>
+<div class="container">
+  <div class="top-actions">
+    <h1 style="margin:0">Deliveries &amp; Invoices</h1>
+    <div class="actions">
+      <a href="/admin/deliveries/export.csv" class="btn btn-secondary">Export (CSV)</a>
+      <a href="/admin/deliveries/new" class="btn">+ New delivery</a>
+    </div>
+  </div>
+  <div class="card">
+    <table>
+      <thead><tr><th>Date</th><th>Client</th><th>Bottles</th><th>Total</th><th>Invoice #</th><th>PDF</th></tr></thead>
+      <tbody>
+      <% deliveries.forEach(d => { %>
+        <tr>
+          <td data-label="Date"><%= d.date %></td>
+          <td data-label="Client"><%= d.client_name %><% if (d.destination) { %><br><span class="muted"><%= d.destination %></span><% } %></td>
+          <td data-label="Bottles"><%= d.bottles_count %><% if (d.breakdown) { %><br><span class="muted" style="font-size:0.75rem"><%= d.breakdown %></span><% } %></td>
+          <td data-label="Total"><%= d.total_amount.toFixed(0) %></td>
+          <td data-label="Invoice #"><%= d.invoice_number %></td>
+          <td data-label="PDF">
+            <a class="btn btn-sm" target="_blank" href="/admin/deliveries/<%= d.id %>/invoice/client">Client copy</a>
+            <a class="btn btn-sm btn-secondary" target="_blank" href="/admin/deliveries/<%= d.id %>/invoice/admin">Admin copy</a>
+          </td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <% if (deliveries.length === 0) { %><p class="muted">No deliveries recorded yet.</p><% } %>
+  </div>
+</div>
+<%- include('../partials/footer') %>

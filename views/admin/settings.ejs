@@ -1,0 +1,78 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'settings' }) %>
+<div class="container">
+  <h1>Settings</h1>
+
+  <div class="card" style="max-width:600px">
+    <h2>Company details (shown on invoices)</h2>
+    <form method="POST" action="/admin/settings">
+      <div class="field">
+        <label>Company name</label>
+        <input type="text" name="company_name" value="<%= settings.company_name %>">
+      </div>
+      <div class="field">
+        <label>Address</label>
+        <input type="text" name="company_address" value="<%= settings.company_address %>">
+      </div>
+      <div class="field">
+        <label>Phone</label>
+        <input type="text" name="company_phone" value="<%= settings.company_phone %>">
+      </div>
+
+      <h2>Wage mode</h2>
+      <div class="field">
+        <label>How workers are currently paid</label>
+        <select name="wage_mode">
+          <option value="per_day" <%= settings.wage_mode === 'per_day' ? 'selected' : '' %>>Per day (fixed daily wage set per worker)</option>
+          <option value="per_bottle" <%= settings.wage_mode === 'per_bottle' ? 'selected' : '' %>>Per bottle filled (rate below applies to everyone)</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Rate per bottle (used only when mode = per bottle)</label>
+        <input type="number" step="0.01" name="per_bottle_rate" value="<%= settings.per_bottle_rate %>">
+      </div>
+      <p class="muted">Switching modes only affects new attendance entries going forward — past days keep the wage they were calculated with.</p>
+
+      <h2>Low-stock alert thresholds</h2>
+      <div class="row">
+        <div class="field">
+          <label>Warn me when empty bottles fall below</label>
+          <input type="number" name="low_stock_threshold_empty" value="<%= settings.low_stock_threshold_empty %>">
+        </div>
+        <div class="field">
+          <label>Warn me when filled bottles (ready to deliver) fall below</label>
+          <input type="number" name="low_stock_threshold_filled" value="<%= settings.low_stock_threshold_filled %>">
+        </div>
+      </div>
+      <button type="submit" class="btn">Save settings</button>
+    </form>
+  </div>
+
+  <div class="card" style="max-width:600px">
+    <h2>Database backup</h2>
+    <p class="muted" style="margin-top:-6px">
+      Your hosting provider's managed MySQL database typically keeps its own
+      automated backups/snapshots. This is an extra copy you control yourself —
+      click below any time to download a complete snapshot of everything
+      (workers, attendance, deliveries, invoices, expenses) as one JSON file,
+      worth keeping somewhere safe like your own cloud storage.
+    </p>
+    <a href="/admin/settings/backup.json" class="btn">Download backup now</a>
+  </div>
+
+  <div class="card" style="max-width:600px">
+    <h2>Change my password</h2>
+    <form method="POST" action="/change-password">
+      <div class="field">
+        <label>Current password</label>
+        <input type="password" name="current_password" required>
+      </div>
+      <div class="field">
+        <label>New password</label>
+        <input type="password" name="new_password" required>
+      </div>
+      <button type="submit" class="btn">Update password</button>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>
