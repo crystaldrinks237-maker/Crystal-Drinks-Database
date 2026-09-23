@@ -42,4 +42,31 @@ async function query(sql, params = []) {
   return [result.rows, result];
 }
 
-module.exports = { query, raw: pgPool };
+/**
+ * Runs `fn` with a single dedicated connection wrapped in BEGIN/COMMIT, so a
+ * batch of statements either all succeed or all roll back together. This is
+ * what keeps a failed migration from leaving the database in a half-created
+ * state (some tables existing, others missing) that then fails forever on
+ * every retry - `fn` receives a query function with the same '?'-placeholder,
+ * `[rows]`-destructuring shape as the normal `query` export above.
+ */
+async function transaction(fn) {
+  const client = await pgPool.connect();
+  try {
+    await client.query('BEGIN');
+    const txQuery = async (sql, params = []) => {
+      const result = await client.query(toPositional(sql), params || []);
+      return [result.rows, result];
+    };
+    const value = await fn(txQuery);
+    await client.query('COMMIT');
+    return value;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+module.exports = { query, transaction, raw: pgPool };

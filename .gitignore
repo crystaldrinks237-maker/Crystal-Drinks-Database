@@ -3,4 +3,3 @@ node_modules/
 sqlite-export.json
 data/*.db
 data/*.db-*
-backups/*.db
