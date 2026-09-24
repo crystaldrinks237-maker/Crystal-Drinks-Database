@@ -81,7 +81,7 @@
       <a href="/admin/inventory/export.csv" class="btn btn-sm btn-secondary">Export (CSV)</a>
     </div>
     <table>
-      <thead><tr><th>Date</th><th>Type</th><th>Quality</th><th>Quantity</th><th>Cost</th><th>Supplier</th></tr></thead>
+      <thead><tr><th>Date</th><th>Type</th><th>Quality</th><th>Quantity</th><th>Cost</th><th>Supplier</th><th></th></tr></thead>
       <tbody>
       <% purchases.forEach(p => { %>
         <tr>
@@ -91,6 +91,13 @@
           <td data-label="Quantity"><%= p.quantity %></td>
           <td data-label="Cost"><%= p.cost_total.toFixed(0) %></td>
           <td data-label="Supplier"><%= p.supplier || '-' %></td>
+          <td data-label="">
+            <form method="POST" action="/admin/inventory/purchase/<%= p.id %>"
+              onsubmit="return confirm('Delete this purchase record?')" style="display:inline">
+              <input type="hidden" name="_method" value="DELETE">
+              <button type="submit" class="btn btn-sm btn-red">Delete</button>
+            </form>
+          </td>
         </tr>
       <% }) %>
       </tbody>

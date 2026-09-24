@@ -204,6 +204,16 @@ router.get('/attendance/export.csv', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Delete a whole day's attendance entry for one worker (also removes its per-variant production rows via cascade).
+router.delete('/attendance/:id', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query('SELECT date FROM attendance WHERE id = ?', [req.params.id]);
+    await pool.query('DELETE FROM attendance WHERE id = ?', [req.params.id]);
+    const redirectDate = rows[0] ? rows[0].date : todayStr();
+    res.redirect('/admin/attendance?date=' + encodeURIComponent(redirectDate));
+  } catch (err) { next(err); }
+});
+
 // ---------- INVENTORY (empty bottles) ----------
 router.get('/inventory', async (req, res, next) => {
   try {
@@ -288,6 +298,16 @@ router.get('/inventory/export.csv', async (req, res, next) => {
     res.setHeader('Content-Type', 'text/csv');
     res.setHeader('Content-Disposition', 'attachment; filename="empty-bottle-purchases.csv"');
     res.send(csv);
+  } catch (err) { next(err); }
+});
+
+// Delete a purchase record. Note: this does NOT remove the matching auto-logged
+// expense (there's no link between them) - delete that separately on the
+// Expenses page if needed.
+router.delete('/inventory/purchase/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM empty_bottle_purchases WHERE id = ?', [req.params.id]);
+    res.redirect('/admin/inventory');
   } catch (err) { next(err); }
 });
 
@@ -444,9 +464,22 @@ router.get('/deliveries/:id/invoice/:copyType', async (req, res, next) => {
     `, [req.params.id]);
     const copyType = req.params.copyType === 'admin' ? 'admin' : 'client';
 
+    const buffer = await generateInvoicePDF({ delivery, items, company: await getCompany(), copyType });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${delivery.invoice_number}-${copyType}.pdf"`);
-    generateInvoicePDF({ stream: res, delivery, items, company: await getCompany(), copyType });
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${delivery.invoice_number}-${copyType}.pdf"`);
+    res.end(buffer);
+  } catch (err) { next(err); }
+});
+
+// Delete a delivery (its line items go with it automatically). Note: this does
+// NOT remove the matching auto-logged petrol expense (there's no link between
+// them) - delete that separately on the Expenses page if needed. The invoice
+// number is not reused.
+router.delete('/deliveries/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM deliveries WHERE id = ?', [req.params.id]);
+    res.redirect('/admin/deliveries');
   } catch (err) { next(err); }
 });
 
@@ -493,6 +526,13 @@ router.post('/expenses', async (req, res, next) => {
     const { date, category, amount, description } = req.body;
     await pool.query('INSERT INTO expenses (date, category, amount, description) VALUES (?, ?, ?, ?)',
       [date, category, parseFloat(amount) || 0, description || null]);
+    res.redirect('/admin/expenses');
+  } catch (err) { next(err); }
+});
+
+router.delete('/expenses/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM expenses WHERE id = ?', [req.params.id]);
     res.redirect('/admin/expenses');
   } catch (err) { next(err); }
 });
@@ -589,11 +629,7 @@ router.get('/reports/:year/:month/pdf', async (req, res, next) => {
 
     const monthLabel = new Date(`${prefix}-01T00:00:00Z`).toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="crystal-drinks-report-${prefix}.pdf"`);
-
-    generateMonthlyReportPDF({
-      stream: res,
+    const buffer = await generateMonthlyReportPDF({
       company: await getCompany(),
       monthLabel,
       data: {
@@ -602,6 +638,11 @@ router.get('/reports/:year/:month/pdf', async (req, res, next) => {
         emptyStockNow, filledStockNow, workers, topClients, byVariant
       }
     });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="crystal-drinks-report-${prefix}.pdf"`);
+    res.end(buffer);
   } catch (err) { next(err); }
 });
 

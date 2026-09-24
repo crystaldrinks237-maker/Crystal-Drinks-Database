@@ -10,7 +10,7 @@
   </div>
   <div class="card">
     <table>
-      <thead><tr><th>Date</th><th>Client</th><th>Bottles</th><th>Total</th><th>Invoice #</th><th>PDF</th></tr></thead>
+      <thead><tr><th>Date</th><th>Client</th><th>Bottles</th><th>Total</th><th>Invoice #</th><th>PDF</th><th></th></tr></thead>
       <tbody>
       <% deliveries.forEach(d => { %>
         <tr>
@@ -20,8 +20,15 @@
           <td data-label="Total"><%= d.total_amount.toFixed(0) %></td>
           <td data-label="Invoice #"><%= d.invoice_number %></td>
           <td data-label="PDF">
-            <a class="btn btn-sm" target="_blank" href="/admin/deliveries/<%= d.id %>/invoice/client">Client copy</a>
-            <a class="btn btn-sm btn-secondary" target="_blank" href="/admin/deliveries/<%= d.id %>/invoice/admin">Admin copy</a>
+            <a class="btn btn-sm" href="/admin/deliveries/<%= d.id %>/invoice/client">Client copy</a>
+            <a class="btn btn-sm btn-secondary" href="/admin/deliveries/<%= d.id %>/invoice/admin">Admin copy</a>
+          </td>
+          <td data-label="">
+            <form method="POST" action="/admin/deliveries/<%= d.id %>"
+              onsubmit="return confirm('Delete this delivery? This cannot be undone.')" style="display:inline">
+              <input type="hidden" name="_method" value="DELETE">
+              <button type="submit" class="btn btn-sm btn-red">Delete</button>
+            </form>
           </td>
         </tr>
       <% }) %>

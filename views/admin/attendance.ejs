@@ -30,7 +30,14 @@
             <td data-label="Bottles filled"><%= a.breakdown || ('Total: ' + a.bottles_filled) %></td>
             <td data-label="Wage"><%= a.wage_amount.toFixed(0) %></td>
             <td data-label="Logged by"><span class="badge <%= a.created_by === 'admin' ? 'badge-red' : 'badge-green' %>"><%= a.created_by %></span></td>
-            <td data-label=""><a class="btn btn-sm btn-secondary" href="/admin/attendance/entry?date=<%= date %>&user_id=<%= a.user_id %>">Edit</a></td>
+            <td data-label="">
+              <a class="btn btn-sm btn-secondary" href="/admin/attendance/entry?date=<%= date %>&user_id=<%= a.user_id %>">Edit</a>
+              <form method="POST" action="/admin/attendance/<%= a.id %>"
+                onsubmit="return confirm('Delete this attendance entry?')" style="display:inline">
+                <input type="hidden" name="_method" value="DELETE">
+                <button type="submit" class="btn btn-sm btn-red">Delete</button>
+              </form>
+            </td>
           </tr>
         <% }) %>
         </tbody>

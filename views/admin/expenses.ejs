@@ -50,7 +50,7 @@
       <a href="/admin/expenses/export.csv" class="btn btn-sm btn-secondary">Export (CSV)</a>
     </div>
     <table>
-      <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th></tr></thead>
+      <thead><tr><th>Date</th><th>Category</th><th>Amount</th><th>Description</th><th></th></tr></thead>
       <tbody>
       <% expenses.forEach(e => { %>
         <tr>
@@ -58,6 +58,13 @@
           <td data-label="Category"><%= e.category.replace('_',' ') %></td>
           <td data-label="Amount"><%= e.amount.toFixed(0) %></td>
           <td data-label="Description"><%= e.description || '-' %></td>
+          <td data-label="">
+            <form method="POST" action="/admin/expenses/<%= e.id %>"
+              onsubmit="return confirm('Delete this expense?')" style="display:inline">
+              <input type="hidden" name="_method" value="DELETE">
+              <button type="submit" class="btn btn-sm btn-red">Delete</button>
+            </form>
+          </td>
         </tr>
       <% }) %>
       </tbody>
