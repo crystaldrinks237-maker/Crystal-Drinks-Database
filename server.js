@@ -19,7 +19,18 @@ app.set('views', path.join(__dirname, 'views'));
 
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
-app.use(methodOverride('_method'));
+// Reads a hidden <input name="_method" value="DELETE"> field from submitted
+// forms (used by the various "Delete" buttons) and treats the request as
+// that method instead of POST. Needs the custom function form specifically -
+// methodOverride('_method') alone only checks the URL's query string, not
+// the form body.
+app.use(methodOverride((req, res) => {
+  if (req.body && typeof req.body === 'object' && '_method' in req.body) {
+    const method = req.body._method;
+    delete req.body._method;
+    return method;
+  }
+}));
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
