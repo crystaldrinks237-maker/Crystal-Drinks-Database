@@ -4,12 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Login - Crystal Drinks</title>
+  <link rel="icon" type="image/png" href="/images/favicon.png">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
   <div class="login-wrap">
     <div class="login-box">
-      <h1>💧 Crystal Drinks</h1>
+      <img src="/images/logo.jpg" alt="Crystal Drinks" style="display:block;width:140px;margin:0 auto 10px;">
       <p class="muted" style="text-align:center;margin-top:-8px;margin-bottom:18px;">Plant management dashboard</p>
       <% if (error) { %><div class="error"><%= error %></div><% } %>
       <form method="POST" action="/login">
