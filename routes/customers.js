@@ -5,6 +5,9 @@ const { toCSV } = require('../lib/csv');
 const {
   round2, listCustomersWithBalances, getCustomerWithBalance, findCustomerByName, getLedger
 } = require('../lib/customerService');
+const { getSetting } = require('../lib/attendanceService');
+const { generateStatementPDF } = require('../lib/statement');
+const wa = require('../lib/whatsapp');
 
 // Mounted inside routes/admin.js, so requireAdmin already protects everything here.
 
@@ -14,6 +17,12 @@ function todayStr() {
 function parseId(v) {
   const n = parseInt(v, 10);
   return Number.isInteger(n) && n > 0 ? n : null;
+}
+async function whatsappContext() {
+  return {
+    company: (await getSetting('company_name')) || 'Crystal Drinks',
+    cc: (await getSetting('whatsapp_country_code')) || '92'
+  };
 }
 function cleanText(v) {
   const s = String(v == null ? '' : v).trim();
@@ -33,6 +42,13 @@ router.get('/', async (req, res, next) => {
     const [[{ n: unlinkedNames }]] = await pool.query(
       'SELECT COUNT(DISTINCT LOWER(TRIM(client_name))) AS n FROM deliveries WHERE customer_id IS NULL'
     );
+
+    const { company, cc } = await whatsappContext();
+    customers.forEach(c => {
+      c.reminderUrl = c.balance > 0
+        ? wa.waLink(c.phone, wa.reminderText({ company, customerName: c.name, balance: c.balance, date: todayStr() }), cc)
+        : null;
+    });
 
     res.render('admin/customers', {
       user: req.session.user, customers, totalOwed, owingCount: owing.length, unlinkedNames
@@ -118,8 +134,24 @@ async function renderDetail(req, res, id, extra = {}) {
   const totalBilled = round2(ledger.reduce((s, e) => s + e.billed, 0));
   const totalPaid = round2(ledger.reduce((s, e) => s + e.paid, 0));
   const hasHistory = ledger.some(e => e.kind !== 'opening');
+
+  const { company, cc } = await whatsappContext();
+  const date = todayStr();
+  const reminderUrl = customer.balance > 0
+    ? wa.waLink(customer.phone, wa.reminderText({ company, customerName: customer.name, balance: customer.balance, date }), cc) : null;
+  const statementUrl = wa.waLink(customer.phone, wa.statementText({ company, customerName: customer.name, balance: customer.balance, date }), cc);
+  ledger.forEach(e => {
+    if (e.kind === 'delivery') {
+      e.whatsappUrl = wa.waLink(customer.phone, wa.invoiceText({
+        company, customerName: customer.name, invoiceNumber: e.invoice_number || ('#' + e.id),
+        date: e.date, billed: e.billed, paid: e.paid, balance: e.balance
+      }), cc);
+    }
+  });
+
   res.render('admin/customer-detail', {
     user: req.session.user, customer, ledger, totalBilled, totalPaid, hasHistory,
+    reminderUrl, statementUrl, hasPhone: !!wa.normalizePhone(customer.phone, cc),
     today: todayStr(), error: null, ...extra
   });
 }
@@ -217,6 +249,28 @@ router.delete('/:id/payments/:paymentId', async (req, res, next) => {
     if (!id || !paymentId) return res.status(404).send('Not found');
     await pool.query('DELETE FROM payments WHERE id = ? AND customer_id = ?', [paymentId, id]);
     res.redirect('/admin/customers/' + id);
+  } catch (err) { next(err); }
+});
+
+// ---------- STATEMENT PDF ----------
+router.get('/:id/statement.pdf', async (req, res, next) => {
+  try {
+    const id = parseId(req.params.id);
+    const customer = id ? await getCustomerWithBalance(id) : null;
+    if (!customer) return res.status(404).send('Customer not found');
+
+    const ledger = (await getLedger(customer)).reverse(); // oldest first reads like a bank statement
+    const company = {
+      company_name: await getSetting('company_name'),
+      company_address: await getSetting('company_address'),
+      company_phone: await getSetting('company_phone')
+    };
+    const buffer = await generateStatementPDF({ customer, ledger, company, asOf: todayStr() });
+    const safeName = customer.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '') || 'customer';
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="statement-${safeName}-${todayStr()}.pdf"`);
+    res.end(buffer);
   } catch (err) { next(err); }
 });
 

@@ -71,6 +71,7 @@
               <div class="actions">
                 <a href="/admin/deliveries/new?customer=<%= c.id %>" class="btn btn-sm">New delivery</a>
                 <a href="/admin/customers/<%= c.id %>#payment" class="btn btn-sm btn-green">Record payment</a>
+                <% if (c.reminderUrl) { %><a href="<%= c.reminderUrl %>" target="_blank" rel="noopener" class="btn btn-sm btn-secondary">WhatsApp reminder</a><% } %>
               </div>
             </td>
           </tr>

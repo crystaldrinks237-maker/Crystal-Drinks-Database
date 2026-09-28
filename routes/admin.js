@@ -763,6 +763,7 @@ router.get('/settings', async (req, res, next) => {
         company_name: await getSetting('company_name'),
         company_address: await getSetting('company_address'),
         company_phone: await getSetting('company_phone'),
+        whatsapp_country_code: await getSetting('whatsapp_country_code'),
         wage_mode: await getSetting('wage_mode'),
         per_bottle_rate: await getSetting('per_bottle_rate'),
         low_stock_threshold_empty: await getSetting('low_stock_threshold_empty'),
@@ -781,6 +782,7 @@ router.post('/settings', async (req, res, next) => {
     await setSetting('company_name', company_name || 'Crystal Drinks');
     await setSetting('company_address', company_address || '');
     await setSetting('company_phone', company_phone || '');
+    await setSetting('whatsapp_country_code', String(req.body.whatsapp_country_code || '').replace(/\D/g, '') || '92');
     await setSetting('wage_mode', wage_mode === 'per_bottle' ? 'per_bottle' : 'per_day');
     await setSetting('per_bottle_rate', String(parseFloat(per_bottle_rate) || 0));
     await setSetting('low_stock_threshold_empty', String(parseInt(low_stock_threshold_empty, 10) || 0));

@@ -18,6 +18,11 @@
         <label>Phone</label>
         <input type="text" name="company_phone" value="<%= settings.company_phone %>">
       </div>
+      <div class="field">
+        <label>Country code for WhatsApp (92 = Pakistan)</label>
+        <input type="text" name="whatsapp_country_code" value="<%= settings.whatsapp_country_code || '92' %>" style="max-width:120px">
+        <p class="hint">Used to turn customer numbers like 0311-1234567 into WhatsApp numbers.</p>
+      </div>
 
       <h2>Wage mode</h2>
       <div class="field">

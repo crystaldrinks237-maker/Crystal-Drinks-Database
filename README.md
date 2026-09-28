@@ -99,6 +99,11 @@ change this immediately in Settings, same as on the hosted version.
     total payable, paid now, and **balance due**.
   - When a customer pays later, open them and use **Record a payment**. Their
     **statement** shows every invoice and payment with a running balance.
+  - **Statement PDF and WhatsApp**: on a customer's page, download a printable
+    account statement, or send a ready-typed WhatsApp message (payment
+    reminder, balance, or a single invoice) to their saved number. On a phone,
+    **Share PDF** attaches the actual PDF file. Set your country code under
+    Settings (92 = Pakistan) so numbers like 0311-1234567 work.
   - A new customer who doesn't pay in full is saved automatically so the
     unpaid amount is never lost. One-time customers who pay in full are not saved.
   - Balances are always calculated from the records, so deleting a delivery or a

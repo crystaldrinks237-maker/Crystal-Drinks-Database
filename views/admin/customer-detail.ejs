@@ -46,6 +46,23 @@
     </div>
   <% } %>
 
+  <div class="card">
+    <h2>Statement &amp; sending to the customer</h2>
+    <p class="muted" style="margin-top:-4px">
+      <% if (hasPhone) { %>Messages open in WhatsApp addressed to <%= customer.phone %>.<% } else { %>No phone number saved for this customer, so WhatsApp will ask you to pick the contact. <a href="/admin/customers/<%= customer.id %>/edit">Add a number</a><% } %>
+    </p>
+    <div class="actions">
+      <a class="btn" href="/admin/customers/<%= customer.id %>/statement.pdf">Download statement (PDF)</a>
+      <button type="button" class="btn btn-secondary" data-share-pdf="/admin/customers/<%= customer.id %>/statement.pdf"
+        data-share-title="Statement - <%= customer.name %>">Share statement PDF</button>
+      <% if (reminderUrl) { %>
+        <a class="btn btn-green" href="<%= reminderUrl %>" target="_blank" rel="noopener">WhatsApp payment reminder</a>
+      <% } %>
+      <a class="btn btn-secondary" href="<%= statementUrl %>" target="_blank" rel="noopener">WhatsApp balance message</a>
+    </div>
+    <p class="hint">"Share statement PDF" opens your phone's share menu with the PDF attached. Pick WhatsApp there. On a computer it just downloads the file, which you can attach in WhatsApp Web.</p>
+  </div>
+
   <div class="card" id="payment">
     <h2>Record a payment</h2>
     <p class="muted" style="margin-top:-4px">Use this when the customer pays you money later, apart from a delivery. It comes off their balance straight away.</p>
@@ -94,6 +111,9 @@
               <% if (e.kind === 'delivery') { %>
                 <a class="btn btn-sm" href="/admin/deliveries/<%= e.id %>/invoice/client">Client copy</a>
                 <a class="btn btn-sm btn-secondary" href="/admin/deliveries/<%= e.id %>/invoice/admin">Admin copy</a>
+                <a class="btn btn-sm btn-green" href="<%= e.whatsappUrl %>" target="_blank" rel="noopener">WhatsApp</a>
+                <button type="button" class="btn btn-sm btn-secondary" data-share-pdf="/admin/deliveries/<%= e.id %>/invoice/client"
+                  data-share-title="Invoice <%= e.invoice_number %>">Share PDF</button>
               <% } else if (e.kind === 'payment') { %>
                 <form method="POST" action="/admin/customers/<%= customer.id %>/payments/<%= e.id %>"
                   onsubmit="return confirm('Delete this payment? The customer\'s balance will go back up.')" style="display:inline">
@@ -121,4 +141,5 @@
     </div>
   <% } %>
 </div>
+<script src="/js/share.js"></script>
 <%- include('../partials/footer') %>
