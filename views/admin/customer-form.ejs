@@ -1,0 +1,54 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'customers' }) %>
+<%
+  // On a failed save, show what was just typed; otherwise show the saved values (or blanks when adding).
+  const has = Object.keys(form || {}).length > 0;
+  const val = (key, fallback) => has ? (form[key] || '') : (customer && customer[key] != null ? customer[key] : fallback);
+%>
+<div class="container">
+  <h1><%= customer ? 'Edit customer' : 'Add customer' %></h1>
+  <div class="card" style="max-width:560px">
+    <% if (error) { %><div class="error"><%= error %></div><% } %>
+    <form method="POST" action="<%= customer ? '/admin/customers/' + customer.id : '/admin/customers' %>">
+      <div class="field">
+        <label>Customer / company name</label>
+        <input type="text" name="name" value="<%= val('name', '') %>" required>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Phone (optional)</label>
+          <input type="text" name="phone" value="<%= val('phone', '') %>">
+        </div>
+        <div class="field">
+          <label>Usual delivery address (optional)</label>
+          <input type="text" name="address" value="<%= val('address', '') %>">
+        </div>
+      </div>
+      <div class="field">
+        <label>Amount they already owe you (opening balance)</label>
+        <input type="number" step="0.01" name="opening_balance" value="<%= val('opening_balance', 0) %>">
+        <p class="hint">
+          Money this customer owed you <em>before</em> you started tracking it here. Leave at 0 if there is none.
+          Use a negative number if they've paid you in advance. New deliveries and payments are added on top of this automatically.
+        </p>
+      </div>
+      <div class="field">
+        <label>Notes (optional, only you see this)</label>
+        <textarea name="notes" rows="2"><%= val('notes', '') %></textarea>
+      </div>
+      <% if (customer) { %>
+        <div class="field">
+          <label class="inline-check">
+            <input type="checkbox" name="active" <%= (has ? form.active : customer.active) ? 'checked' : '' %>>
+            Active (untick to hide from the delivery form, their history stays)
+          </label>
+        </div>
+      <% } %>
+      <div class="actions">
+        <button type="submit" class="btn">Save</button>
+        <a href="<%= customer ? '/admin/customers/' + customer.id : '/admin/customers' %>" class="btn btn-secondary">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+<%- include('../partials/footer') %>

@@ -23,6 +23,9 @@ moving it from the old local/laptop version.
 - One-click PDF invoices with a full line-item breakdown: a **Client Copy**
   and an **Admin/Office Copy** (the admin copy also shows your internal
   petrol cost / margin for that trip)
+- **Customers & balances**: keep a list of regular customers, record what they
+  paid at delivery and any payments they make later, and every new invoice
+  automatically shows what they still owed before it, plus the new total
 - Expense tracking: bottle purchases, petrol, vehicle maintenance, electricity
 - Wages: pay per day today, and you can flip a single switch later to pay per
   bottle filled — no data migration needed
@@ -86,6 +89,21 @@ change this immediately in Settings, same as on the hosted version.
   professional, itemized) and "Admin copy" (adds your internal cost note).
   Open either in the browser and use your browser's Print or Save-as-PDF
   option to hand it over or file it.
+- **Customers** tab: your regular customers and how much each one owes you.
+  - Add a customer (the *opening balance* is anything they already owed before
+    you started using this tab). On first use, one click adds all the customer
+    names from your past deliveries.
+  - On **New delivery**, pick the customer from the dropdown (or choose
+    "New / one-time customer"). Enter *Amount received now* - the form shows the
+    live balance. The invoice PDF then lists: this delivery, previous balance,
+    total payable, paid now, and **balance due**.
+  - When a customer pays later, open them and use **Record a payment**. Their
+    **statement** shows every invoice and payment with a running balance.
+  - A new customer who doesn't pay in full is saved automatically so the
+    unpaid amount is never lost. One-time customers who pay in full are not saved.
+  - Balances are always calculated from the records, so deleting a delivery or a
+    payment fixes the balance by itself. Printed invoices keep the balance as it was
+    on the day.
 - **Expenses** tab: log vehicle maintenance, electricity bills, or anything else.
 - **Settings** tab: set your company name/address/phone (shown on invoices),
   switch wage mode between "per day" and "per bottle" whenever you're ready

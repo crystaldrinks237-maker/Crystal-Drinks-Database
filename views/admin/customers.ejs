@@ -1,0 +1,106 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'customers' }) %>
+<div class="container">
+  <div class="top-actions">
+    <h1 style="margin:0">Customers</h1>
+    <div class="actions">
+      <a href="/admin/customers/export.csv" class="btn btn-secondary">Export (CSV)</a>
+      <a href="/admin/customers/new" class="btn">+ Add customer</a>
+    </div>
+  </div>
+
+  <div class="grid grid-3">
+    <div class="card stat">
+      <div class="num" style="color: <%= totalOwed > 0 ? '#dc2626' : '#059669' %>"><%= fmt(totalOwed) %></div>
+      <div class="label">Total owed to you</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= owingCount %></div>
+      <div class="label">Customers who owe money</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= customers.length %></div>
+      <div class="label">Regular customers</div>
+    </div>
+  </div>
+
+  <% if (unlinkedNames > 0) { %>
+    <div class="card" style="border-color:#bae6fd; background:#f0f9ff;">
+      <strong>Add your past customers in one click</strong>
+      <p class="muted" style="margin:6px 0 10px">
+        Your past deliveries mention <%= unlinkedNames %> different customer name<%= unlinkedNames === 1 ? '' : 's' %> that
+        aren't in this list yet. Add them all now and link their old deliveries. Nobody will show as owing anything,
+        since your past deliveries are treated as paid. You can fix any names or add
+        money someone currently owes you afterwards.
+      </p>
+      <form method="POST" action="/admin/customers/import-from-deliveries">
+        <button type="submit" class="btn">Add customers from past deliveries</button>
+      </form>
+    </div>
+  <% } %>
+
+  <div class="card">
+    <% if (customers.length === 0) { %>
+      <p class="muted">No customers yet. Add your regular customers here, then pick them when you record a delivery, and their unpaid balance will follow them from invoice to invoice.</p>
+    <% } else { %>
+      <div class="row" style="align-items:center; margin-bottom:10px">
+        <div class="field" style="margin-bottom:0"><input type="search" id="customer-search" placeholder="Search customers..."></div>
+        <label class="inline-check" style="margin:0; flex:0 0 auto"><input type="checkbox" id="only-owing"> Only those who owe money</label>
+      </div>
+      <table id="customers-table">
+        <thead><tr><th>Customer</th><th>Last delivery</th><th>Balance owed</th><th></th></tr></thead>
+        <tbody>
+        <% customers.forEach(c => { %>
+          <tr data-name="<%= c.name.toLowerCase() %> <%= (c.phone || '').toLowerCase() %>" data-balance="<%= c.balance %>">
+            <td data-label="Customer">
+              <a href="/admin/customers/<%= c.id %>"><strong><%= c.name %></strong></a>
+              <% if (!c.active) { %><span class="badge badge-grey">Inactive</span><% } %>
+              <% if (c.phone) { %><br><span class="muted"><%= c.phone %></span><% } %>
+            </td>
+            <td data-label="Last delivery"><%= c.last_delivery || '-' %></td>
+            <td data-label="Balance owed">
+              <% if (c.balance > 0) { %>
+                <strong class="text-red"><%= fmt(c.balance) %></strong>
+              <% } else if (c.balance < 0) { %>
+                <span class="text-green">Credit <%= fmt(-c.balance) %></span>
+              <% } else { %>
+                <span class="muted">Nothing owed</span>
+              <% } %>
+            </td>
+            <td data-label="">
+              <div class="actions">
+                <a href="/admin/deliveries/new?customer=<%= c.id %>" class="btn btn-sm">New delivery</a>
+                <a href="/admin/customers/<%= c.id %>#payment" class="btn btn-sm btn-green">Record payment</a>
+              </div>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <p class="muted" id="no-matches" style="display:none">No customers match.</p>
+    <% } %>
+  </div>
+</div>
+
+<script>
+  (function () {
+    const search = document.getElementById('customer-search');
+    const onlyOwing = document.getElementById('only-owing');
+    if (!search) return;
+    const rows = Array.from(document.querySelectorAll('#customers-table tbody tr'));
+    const none = document.getElementById('no-matches');
+    function apply() {
+      const q = search.value.trim().toLowerCase();
+      let shown = 0;
+      rows.forEach(r => {
+        const match = (!q || r.dataset.name.includes(q)) && (!onlyOwing.checked || parseFloat(r.dataset.balance) > 0);
+        r.style.display = match ? '' : 'none';
+        if (match) shown++;
+      });
+      none.style.display = shown === 0 ? '' : 'none';
+    }
+    search.addEventListener('input', apply);
+    onlyOwing.addEventListener('change', apply);
+  })();
+</script>
+<%- include('../partials/footer') %>

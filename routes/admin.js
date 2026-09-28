@@ -9,8 +9,10 @@ const { toCSV } = require('../lib/csv');
 const { exportAllTablesAsJSON } = require('../lib/backup');
 const { activeVariants, allVariantsIncludingInactive, getProductionMap, saveAttendance, getSetting } = require('../lib/attendanceService');
 const { ensureAllVariantsExist } = require('../lib/migrate');
+const { round2, listCustomersWithBalances, getBalance, findCustomerByName } = require('../lib/customerService');
 
 router.use(requireAdmin);
+router.use('/customers', require('./customers'));
 
 async function setSetting(key, value) {
   await pool.query(
@@ -54,6 +56,10 @@ router.get('/', async (req, res, next) => {
     );
     const [recentDeliveries] = await pool.query('SELECT * FROM deliveries ORDER BY date DESC, id DESC LIMIT 5');
 
+    // Who owes us money (credits / prepayments don't offset other people's debts here)
+    const owing = (await listCustomersWithBalances()).filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance);
+    const totalOwed = round2(owing.reduce((s, c) => s + c.balance, 0));
+
     const lowStockEmptyThreshold = parseInt((await getSetting('low_stock_threshold_empty')) || '200', 10);
     const lowStockFilledThreshold = parseInt((await getSetting('low_stock_threshold_filled')) || '100', 10);
 
@@ -65,7 +71,8 @@ router.get('/', async (req, res, next) => {
       lowFilled: filledStock < lowStockFilledThreshold,
       totalRevenue, totalWages, totalExpenses, totalBottleCost,
       netEstimate: totalRevenue - totalWages - totalExpenses - totalBottleCost,
-      todaysAttendance, recentDeliveries, today
+      todaysAttendance, recentDeliveries, today,
+      totalOwed, owingCount: owing.length, topOwing: owing.slice(0, 5)
     });
   } catch (err) { next(err); }
 });
@@ -392,56 +399,143 @@ router.get('/deliveries', async (req, res, next) => {
   } catch (err) { next(err); }
 });
 
+// Everything the delivery form needs: bottle rows, the regular-customer picker
+// (with balances), and each customer's last price per bottle type so it can be pre-filled.
+async function deliveryFormData(req, extra = {}) {
+  const variants = extra.variants || await activeVariants();
+  const customers = (await listCustomersWithBalances()).filter(c => c.active);
+
+  const [priceRows] = await pool.query(`
+    SELECT d.customer_id, di.variant_id, di.price_per_bottle
+    FROM delivery_items di
+    JOIN deliveries d ON d.id = di.delivery_id
+    WHERE di.id IN (
+      SELECT MAX(di2.id)
+      FROM delivery_items di2
+      JOIN deliveries d2 ON d2.id = di2.delivery_id
+      WHERE d2.customer_id IS NOT NULL AND di2.variant_id IS NOT NULL
+      GROUP BY d2.customer_id, di2.variant_id
+    )
+  `);
+  const lastPrices = {};
+  priceRows.forEach(r => {
+    (lastPrices[r.customer_id] = lastPrices[r.customer_id] || {})[r.variant_id] = r.price_per_bottle;
+  });
+
+  return {
+    user: req.session.user, variants, customers, lastPrices,
+    error: null, form: null, selectedCustomerId: '', ...extra
+  };
+}
+
 router.get('/deliveries/new', async (req, res, next) => {
   try {
-    res.render('admin/delivery-form', { user: req.session.user, delivery: null, variants: await activeVariants() });
+    // /admin/deliveries/new?customer=12 opens the form with that customer already chosen
+    const wanted = parseInt(req.query.customer, 10);
+    res.render('admin/delivery-form', await deliveryFormData(req, { selectedCustomerId: Number.isInteger(wanted) ? String(wanted) : '' }));
   } catch (err) { next(err); }
 });
 
+// Thrown for mistakes the person can fix (shown on the form), as opposed to real server errors.
+class FormError extends Error {}
+
 router.post('/deliveries', async (req, res, next) => {
   try {
-    const { date, client_name, destination, petrol_cost, notes } = req.body;
+    const {
+      date, customer_id, client_name, destination, petrol_cost, notes,
+      amount_paid, new_phone, new_opening_balance, save_customer
+    } = req.body;
     const variants = await activeVariants();
+    const showError = async (error) => res.render('admin/delivery-form', await deliveryFormData(req, {
+      variants, error, form: req.body, selectedCustomerId: customer_id || ''
+    }));
 
     const items = variants.map(v => {
       const quantity = parseInt(req.body['qty_' + v.id], 10) || 0;
       const price = parseFloat(req.body['price_' + v.id]) || 0;
-      return { variantId: v.id, quantity, price, subtotal: quantity * price };
+      return { variantId: v.id, quantity, price, subtotal: round2(quantity * price) };
     }).filter(i => i.quantity > 0);
 
     if (items.length === 0) {
-      return res.render('admin/delivery-form', {
-        user: req.session.user, delivery: null, variants,
-        error: 'Enter a quantity for at least one bottle type/quality.'
-      });
+      return showError('Enter a quantity for at least one bottle type/quality.');
     }
 
     const totalBottles = items.reduce((s, i) => s + i.quantity, 0);
-    const totalAmount = items.reduce((s, i) => s + i.subtotal, 0);
+    const totalAmount = round2(items.reduce((s, i) => s + i.subtotal, 0));
+    const paid = Math.max(0, round2(parseFloat(amount_paid) || 0));
 
-    let counter = parseInt((await getSetting('invoice_counter')) || '1000', 10);
-    const invoiceNumber = 'CD-' + counter;
-    await setSetting('invoice_counter', String(counter + 1));
+    try {
+      // One transaction: either the whole delivery is saved (customer, invoice
+      // number, items, petrol expense) or none of it is.
+      await pool.transaction(async (q) => {
+        let customer = null;
+        let clientName;
 
-    const [rows] = await pool.query(`
-      INSERT INTO deliveries (date, client_name, destination, bottles_count, price_per_bottle, total_amount, petrol_cost, notes, invoice_number)
-      VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?)
-      RETURNING id
-    `, [date, client_name, destination || null, totalBottles, totalAmount, parseFloat(petrol_cost) || 0, notes || null, invoiceNumber]);
+        if (customer_id) {
+          // A regular customer picked from the list
+          const [found] = await q('SELECT * FROM customers WHERE id = ?', [parseInt(customer_id, 10) || 0]);
+          customer = found[0];
+          if (!customer) throw new FormError('That customer could not be found. Please pick again.');
+          clientName = customer.name;
+        } else {
+          // Someone new / one-time
+          clientName = String(client_name || '').trim();
+          if (!clientName) throw new FormError('Please enter the customer\'s name.');
+          const existing = await findCustomerByName(clientName, q);
+          if (existing) {
+            throw new FormError(`"${existing.name}" is already in your Customers list. Pick them from the customer dropdown so their balance is tracked.`);
+          }
+          // Anyone who still owes money (or already owed some) has to be saved as a
+          // customer - otherwise that debt would be lost track of.
+          const owedBefore = round2(parseFloat(new_opening_balance) || 0);
+          const stillOwes = round2(totalAmount - paid) !== 0;
+          if (save_customer || owedBefore !== 0 || stillOwes) {
+            const [ins] = await q(
+              'INSERT INTO customers (name, phone, address, opening_balance) VALUES (?, ?, ?, ?) RETURNING id',
+              [clientName, String(new_phone || '').trim() || null, String(destination || '').trim() || null, owedBefore]
+            );
+            customer = { id: ins[0].id, name: clientName };
+          }
+        }
 
-    const deliveryId = rows[0].id;
-    for (const i of items) {
-      await pool.query(
-        'INSERT INTO delivery_items (delivery_id, variant_id, quantity, price_per_bottle, subtotal) VALUES (?, ?, ?, ?, ?)',
-        [deliveryId, i.variantId, i.quantity, i.price, i.subtotal]
-      );
-    }
+        // Balance owed just before this delivery - frozen onto the invoice.
+        const previousBalance = customer ? await getBalance(customer.id, q) : 0;
+        const finalDestination = String(destination || '').trim() || (customer && customer.address) || null;
 
-    if (parseFloat(petrol_cost) > 0) {
-      await pool.query(
-        `INSERT INTO expenses (date, category, amount, description) VALUES (?, 'petrol', ?, ?)`,
-        [date, parseFloat(petrol_cost), `Petrol for delivery to ${client_name}`]
-      );
+        const [counterRows] = await q('SELECT value FROM settings WHERE "key" = ?', ['invoice_counter']);
+        const counter = parseInt(counterRows[0] && counterRows[0].value, 10) || 1000;
+        const invoiceNumber = 'CD-' + counter;
+        await q(
+          'INSERT INTO settings ("key", value) VALUES (?, ?) ON CONFLICT ("key") DO UPDATE SET value = EXCLUDED.value',
+          ['invoice_counter', String(counter + 1)]
+        );
+
+        const petrol = parseFloat(petrol_cost) || 0;
+        const [rows] = await q(`
+          INSERT INTO deliveries (date, client_name, destination, bottles_count, price_per_bottle, total_amount, petrol_cost, notes, invoice_number, customer_id, previous_balance, amount_paid)
+          VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+          RETURNING id
+        `, [date, clientName, finalDestination, totalBottles, totalAmount, petrol, notes || null, invoiceNumber,
+            customer ? customer.id : null, previousBalance, paid]);
+
+        const deliveryId = rows[0].id;
+        for (const i of items) {
+          await q(
+            'INSERT INTO delivery_items (delivery_id, variant_id, quantity, price_per_bottle, subtotal) VALUES (?, ?, ?, ?, ?)',
+            [deliveryId, i.variantId, i.quantity, i.price, i.subtotal]
+          );
+        }
+
+        if (petrol > 0) {
+          await q(
+            `INSERT INTO expenses (date, category, amount, description) VALUES (?, 'petrol', ?, ?)`,
+            [date, petrol, `Petrol for delivery to ${clientName}`]
+          );
+        }
+      });
+    } catch (err) {
+      if (err instanceof FormError) return showError(err.message);
+      throw err;
     }
 
     res.redirect('/admin/deliveries');
@@ -487,6 +581,7 @@ router.get('/deliveries/export.csv', async (req, res, next) => {
   try {
     const [rows] = await pool.query(`
       SELECT d.*,
+        (d.previous_balance + d.total_amount - d.amount_paid) AS balance_due,
         (SELECT STRING_AGG(CONCAT(t.name, ' ', q.name, ' x', di.quantity, ' @', di.price_per_bottle), '; ')
          FROM delivery_items di
          JOIN bottle_variants v ON v.id = di.variant_id
@@ -502,6 +597,9 @@ router.get('/deliveries/export.csv', async (req, res, next) => {
       { key: 'bottles_count', label: 'Bottles' },
       { key: 'breakdown', label: 'Breakdown (type quality x qty @price)' },
       { key: 'total_amount', label: 'Total Amount' },
+      { key: 'previous_balance', label: 'Previous Balance' },
+      { key: 'amount_paid', label: 'Paid At Delivery' },
+      { key: 'balance_due', label: 'Balance Due After Delivery' },
       { key: 'petrol_cost', label: 'Petrol Cost' },
       { key: 'invoice_number', label: 'Invoice Number' },
       { key: 'notes', label: 'Notes' }

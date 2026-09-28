@@ -110,7 +110,20 @@ input, select, textarea {
 .muted { color: var(--muted); font-size: 0.85rem; }
 .actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .top-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+/* Customers & balances */
+.text-red { color: var(--red); }
+.text-green { color: var(--green); }
+.text-right { text-align: right; }
+.badge-amber { background: #fef3c7; color: #92400e; }
+.badge-grey { background: #e5e7eb; color: #374151; }
+.sum-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px dashed var(--border); }
+.sum-row.total { font-size: 1.05rem; font-weight: 700; border-bottom: none; padding-bottom: 0; }
+.summary-box { background: #f0f9ff; border-color: #bae6fd; }
+.hint { font-size: 0.8rem; color: var(--muted); margin: 6px 0 0; }
+.inline-check { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.inline-check input { width: auto; }
 @media (max-width: 600px) {
+  td.text-right { text-align: left; }
   table, thead, tbody, th, td, tr { display: block; }
   thead { display: none; }
   tr { border-bottom: 2px solid var(--border); padding: 8px 0; }

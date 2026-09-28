@@ -69,6 +69,32 @@ CREATE TABLE IF NOT EXISTS empty_bottle_purchases (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Regular customers. Their balance owed is never stored - it is always worked out
+-- from opening_balance + what was billed on deliveries - what was paid.
+CREATE TABLE IF NOT EXISTS customers (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  phone VARCHAR(50),
+  address VARCHAR(255),
+  notes TEXT,
+  opening_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
+  active SMALLINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Money received from a customer separately from a delivery (e.g. paying off an old balance later)
+CREATE TABLE IF NOT EXISTS payments (
+  id SERIAL PRIMARY KEY,
+  customer_id INTEGER NOT NULL REFERENCES customers(id),
+  date DATE NOT NULL,
+  amount DECIMAL(12,2) NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- customer_id is empty for one-time customers.
+-- previous_balance is a snapshot of what the customer owed just before this delivery, so the printed invoice never changes later.
+-- amount_paid is what the customer paid at the time of this delivery.
 CREATE TABLE IF NOT EXISTS deliveries (
   id SERIAL PRIMARY KEY,
   date DATE NOT NULL,
@@ -80,6 +106,9 @@ CREATE TABLE IF NOT EXISTS deliveries (
   petrol_cost DECIMAL(12,2) NOT NULL DEFAULT 0,
   notes TEXT,
   invoice_number VARCHAR(50),
+  customer_id INTEGER REFERENCES customers(id) ON DELETE SET NULL,
+  previous_balance DECIMAL(12,2) NOT NULL DEFAULT 0,
+  amount_paid DECIMAL(12,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

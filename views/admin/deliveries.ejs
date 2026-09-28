@@ -10,14 +10,22 @@
   </div>
   <div class="card">
     <table>
-      <thead><tr><th>Date</th><th>Client</th><th>Bottles</th><th>Total</th><th>Invoice #</th><th>PDF</th><th></th></tr></thead>
+      <thead><tr><th>Date</th><th>Client</th><th>Bottles</th><th>Total</th><th>Balance due</th><th>Invoice #</th><th>PDF</th><th></th></tr></thead>
       <tbody>
       <% deliveries.forEach(d => { %>
         <tr>
           <td data-label="Date"><%= d.date %></td>
-          <td data-label="Client"><%= d.client_name %><% if (d.destination) { %><br><span class="muted"><%= d.destination %></span><% } %></td>
+          <td data-label="Client"><% if (d.customer_id) { %><a href="/admin/customers/<%= d.customer_id %>"><%= d.client_name %></a><% } else { %><%= d.client_name %><% } %><% if (d.destination) { %><br><span class="muted"><%= d.destination %></span><% } %></td>
           <td data-label="Bottles"><%= d.bottles_count %><% if (d.breakdown) { %><br><span class="muted" style="font-size:0.75rem"><%= d.breakdown %></span><% } %></td>
-          <td data-label="Total"><%= d.total_amount.toFixed(0) %></td>
+          <td data-label="Total"><%= fmt(d.total_amount) %></td>
+          <td data-label="Balance due">
+            <%# Balance left on this customer's account right after this delivery, as printed on the invoice %>
+            <% if (d.customer_id) { const due = Math.round((d.previous_balance + d.total_amount - d.amount_paid) * 100) / 100; %>
+              <% if (due > 0) { %><strong class="text-red"><%= fmt(due) %></strong>
+              <% } else if (due < 0) { %><span class="text-green">Credit <%= fmt(-due) %></span>
+              <% } else { %><span class="badge badge-green">Paid</span><% } %>
+            <% } else { %><span class="muted">-</span><% } %>
+          </td>
           <td data-label="Invoice #"><%= d.invoice_number %></td>
           <td data-label="PDF">
             <a class="btn btn-sm" href="/admin/deliveries/<%= d.id %>/invoice/client">Client copy</a>

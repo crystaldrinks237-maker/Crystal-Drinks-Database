@@ -14,6 +14,12 @@ const PORT = process.env.PORT || 3000;
 // "secure" cookie detection work correctly.
 app.set('trust proxy', 1);
 
+// Shows money the way the rest of the app does: whole numbers plain, 2 decimals only when needed.
+app.locals.fmt = n => {
+  const v = Math.round((Number(n) || 0) * 100) / 100;
+  return Number.isInteger(v) ? String(v) : v.toFixed(2);
+};
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 

@@ -19,7 +19,7 @@ const { runMigrations } = require('../lib/migrate');
 const TABLES_IN_ORDER = [
   'users', 'bottle_types', 'bottle_qualities', 'bottle_variants',
   'attendance', 'production', 'empty_bottle_purchases',
-  'deliveries', 'delivery_items', 'expenses', 'settings'
+  'customers', 'deliveries', 'delivery_items', 'payments', 'expenses', 'settings'
 ];
 
 async function main() {
@@ -60,6 +60,10 @@ async function main() {
       );
     }
   }
+
+  // The old local version never recorded payments, so treat every imported
+  // delivery as paid in full (otherwise they'd all look unpaid once customers are added).
+  await pool.query('UPDATE deliveries SET amount_paid = total_amount');
 
   console.log('\nImport complete! Your existing data is now in the hosted database.');
   process.exit(0);

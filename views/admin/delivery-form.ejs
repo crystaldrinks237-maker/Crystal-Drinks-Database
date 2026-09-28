@@ -1,23 +1,74 @@
 <%- include('../partials/header') %>
 <%- include('../partials/admin-nav', { active: 'deliveries' }) %>
+<%
+  // "form" holds what was typed when a save failed, so nothing has to be re-entered. Null on a fresh form.
+  const f = form || {};
+  const isFresh = !form;
+  const chosenId = String(f.customer_id != null ? f.customer_id : selectedCustomerId || '');
+  const chosen = customers.find(c => String(c.id) === chosenId) || null;
+  const isNewCustomer = !chosen;
+  const v = (key, fallback) => (f[key] !== undefined && f[key] !== null ? f[key] : fallback);
+%>
 <div class="container">
   <h1>New delivery</h1>
   <div class="card" style="max-width:700px">
     <% if (typeof error !== 'undefined' && error) { %><div class="error"><%= error %></div><% } %>
-    <form method="POST" action="/admin/deliveries">
+    <form method="POST" action="/admin/deliveries" id="delivery-form">
       <div class="row">
         <div class="field">
           <label>Date</label>
-          <input type="date" name="date" value="<%= new Date().toISOString().slice(0,10) %>" required>
+          <input type="date" name="date" value="<%= v('date', new Date().toISOString().slice(0,10)) %>" required>
         </div>
         <div class="field">
-          <label>Client / company name</label>
-          <input type="text" name="client_name" required>
+          <label>Customer</label>
+          <select name="customer_id" id="customer_id">
+            <option value="" data-balance="0" data-address="" data-prices="{}">+ New / one-time customer</option>
+            <% customers.forEach(c => { %>
+              <option value="<%= c.id %>"
+                data-balance="<%= c.balance %>"
+                data-address="<%= c.address || '' %>"
+                data-prices="<%= JSON.stringify(lastPrices[c.id] || {}) %>"
+                <%= String(c.id) === chosenId ? 'selected' : '' %>>
+                <%= c.name %><%= c.balance > 0 ? ' (owes ' + fmt(c.balance) + ')' : (c.balance < 0 ? ' (credit ' + fmt(-c.balance) + ')' : '') %>
+              </option>
+            <% }) %>
+          </select>
         </div>
       </div>
+
+      <%# Shown only when a regular customer is picked %>
+      <div id="customer-info" class="hint" style="margin:-4px 0 12px; display:none"></div>
+
+      <%# Shown only for a new / one-time customer %>
+      <div id="new-customer-fields" style="<%= isNewCustomer ? '' : 'display:none' %>">
+        <div class="row">
+          <div class="field">
+            <label>Customer / company name</label>
+            <input type="text" name="client_name" id="client_name" value="<%= v('client_name', '') %>" <%= isNewCustomer ? '' : 'disabled' %>>
+          </div>
+          <div class="field">
+            <label>Phone (optional)</label>
+            <input type="text" name="new_phone" value="<%= v('new_phone', '') %>" <%= isNewCustomer ? '' : 'disabled' %>>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Did they owe you anything before today? (optional)</label>
+            <input type="number" step="0.01" name="new_opening_balance" id="new_opening_balance" value="<%= v('new_opening_balance', 0) %>" <%= isNewCustomer ? '' : 'disabled' %>>
+          </div>
+          <div class="field">
+            <label class="inline-check" style="margin-top:26px">
+              <input type="checkbox" name="save_customer" id="save_customer" <%= f.save_customer ? 'checked' : '' %> <%= isNewCustomer ? '' : 'disabled' %>>
+              Save as a regular customer
+            </label>
+          </div>
+        </div>
+        <p class="hint" id="track-hint" style="margin-top:-6px; display:none"></p>
+      </div>
+
       <div class="field">
         <label>Delivery destination / address (optional)</label>
-        <input type="text" name="destination">
+        <input type="text" name="destination" id="destination" value="<%= v('destination', '') %>">
       </div>
 
       <label>Bottles in this delivery, by type &amp; quality</label>
@@ -28,27 +79,43 @@
         <table style="margin-bottom:12px">
           <thead><tr><th>Type</th><th>Quality</th><th>Quantity</th><th>Price per bottle</th></tr></thead>
           <tbody>
-          <% variants.forEach(v => { %>
-            <tr>
-              <td data-label="Type"><%= v.type_name %></td>
-              <td data-label="Quality"><%= v.quality_name %></td>
-              <td data-label="Quantity"><input type="number" name="qty_<%= v.id %>" min="0" value="0" style="max-width:100px"></td>
-              <td data-label="Price per bottle"><input type="number" step="0.01" name="price_<%= v.id %>" min="0" value="0" style="max-width:120px"></td>
+          <% variants.forEach(vr => { %>
+            <tr data-variant="<%= vr.id %>">
+              <td data-label="Type"><%= vr.type_name %></td>
+              <td data-label="Quality"><%= vr.quality_name %></td>
+              <td data-label="Quantity"><input type="number" name="qty_<%= vr.id %>" min="0" value="<%= v('qty_' + vr.id, 0) %>" style="max-width:100px"></td>
+              <td data-label="Price per bottle"><input type="number" step="0.01" name="price_<%= vr.id %>" min="0" value="<%= v('price_' + vr.id, 0) %>" style="max-width:120px"></td>
             </tr>
           <% }) %>
           </tbody>
         </table>
+        <p class="hint" id="price-hint" style="margin-top:-6px; display:none">Prices were filled in from this customer's last delivery. Change them if today's prices are different.</p>
       <% } %>
+
+      <div class="card summary-box" style="margin:14px 0">
+        <div class="sum-row"><span>This delivery total</span><strong id="sum-bill">0</strong></div>
+        <div class="sum-row" id="row-prev" style="display:none"><span id="prev-label">Previous balance owed</span><strong id="sum-prev">0</strong></div>
+        <div class="sum-row">
+          <span>Amount received now</span>
+          <input type="number" step="0.01" min="0" name="amount_paid" id="amount_paid" value="<%= v('amount_paid', 0) %>" style="max-width:140px; text-align:right">
+        </div>
+        <div class="actions" style="margin:8px 0">
+          <button type="button" class="btn btn-sm btn-green" id="btn-full">Paid in full</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="btn-none">Nothing paid</button>
+          <button type="button" class="btn btn-sm btn-secondary" id="btn-all" style="display:none">Bill + old balance</button>
+        </div>
+        <div class="sum-row total"><span id="due-label">Balance due after this delivery</span><span id="sum-due">0</span></div>
+      </div>
 
       <div class="row">
         <div class="field">
           <label>Petrol cost for this trip (optional)</label>
-          <input type="number" step="0.01" name="petrol_cost" value="0">
+          <input type="number" step="0.01" name="petrol_cost" value="<%= v('petrol_cost', 0) %>">
         </div>
       </div>
       <div class="field">
         <label>Notes (optional, shown on invoice)</label>
-        <textarea name="notes" rows="2"></textarea>
+        <textarea name="notes" rows="2"><%= v('notes', '') %></textarea>
       </div>
       <div class="actions">
         <button type="submit" class="btn">Save delivery &amp; generate invoice</button>
@@ -57,4 +124,119 @@
     </form>
   </div>
 </div>
+
+<script>
+  (function () {
+    const sel = document.getElementById('customer_id');
+    const newFields = document.getElementById('new-customer-fields');
+    const info = document.getElementById('customer-info');
+    const dest = document.getElementById('destination');
+    const paid = document.getElementById('amount_paid');
+    const opening = document.getElementById('new_opening_balance');
+    const saveBox = document.getElementById('save_customer');
+    const trackHint = document.getElementById('track-hint');
+    const priceHint = document.getElementById('price-hint');
+    const rows = Array.from(document.querySelectorAll('tr[data-variant]')).map(tr => ({
+      id: tr.dataset.variant,
+      qty: tr.querySelector('input[name^="qty_"]'),
+      price: tr.querySelector('input[name^="price_"]')
+    }));
+
+    const money = n => { n = Math.round(n * 100) / 100; return Number.isInteger(n) ? String(n) : n.toFixed(2); };
+    const num = el => parseFloat(el && el.value) || 0;
+    // After a failed save the person's own payment figure must be kept; on a fresh form we manage it.
+    let paidTouched = <%= isFresh ? 'false' : 'true' %>;
+    let autoAddress = '';
+
+    function selected() { return sel.options[sel.selectedIndex]; }
+    function billTotal() { return Math.round(rows.reduce((t, r) => t + num(r.qty) * num(r.price), 0) * 100) / 100; }
+
+    function applyLastPrices() {
+      let prices = {};
+      try { prices = JSON.parse(selected().dataset.prices || '{}'); } catch (e) {}
+      let any = false;
+      rows.forEach(r => { if (prices[r.id] !== undefined) { r.price.value = prices[r.id]; any = true; } });
+      if (priceHint) priceHint.style.display = any ? '' : 'none';
+    }
+
+    function update() {
+      const isNew = sel.value === '';
+      newFields.style.display = isNew ? '' : 'none';
+      newFields.querySelectorAll('input').forEach(i => { i.disabled = !isNew; });
+      document.getElementById('client_name').required = isNew;
+
+      const bill = billTotal();
+      const prev = isNew ? num(opening) : (parseFloat(selected().dataset.balance) || 0);
+
+      // Walk-in customers usually pay on the spot, so default to "paid in full" until told otherwise.
+      if (!paidTouched) paid.value = isNew ? bill : 0;
+      const got = num(paid);
+      const due = Math.round((bill + prev - got) * 100) / 100;
+
+      document.getElementById('sum-bill').textContent = money(bill);
+      document.getElementById('row-prev').style.display = prev !== 0 ? '' : 'none';
+      document.getElementById('prev-label').textContent = prev > 0 ? 'Previous balance owed' : 'Credit from earlier payments';
+      document.getElementById('sum-prev').textContent = money(prev);
+      document.getElementById('btn-all').style.display = prev > 0 ? '' : 'none';
+
+      const dueEl = document.getElementById('sum-due');
+      const dueLabel = document.getElementById('due-label');
+      if (due > 0) { dueLabel.textContent = 'Balance due after this delivery'; dueEl.className = 'text-red'; dueEl.textContent = money(due); }
+      else if (due < 0) { dueLabel.textContent = 'Credit balance (they paid ahead)'; dueEl.className = 'text-green'; dueEl.textContent = money(-due); }
+      else { dueLabel.textContent = 'Balance due after this delivery'; dueEl.className = 'text-green'; dueEl.textContent = '0 (paid in full)'; }
+
+      if (isNew) {
+        const tracked = (saveBox && saveBox.checked) || prev !== 0 || Math.round((bill - got) * 100) !== 0;
+        trackHint.style.display = tracked ? '' : 'none';
+        trackHint.textContent = 'This customer will be added to your Customers list so their balance is tracked.';
+      }
+    }
+
+    function onCustomerChange() {
+      const opt = selected();
+      const isNew = sel.value === '';
+      // Fill in the usual address, but never overwrite something the person typed themselves.
+      if (!dest.value || dest.value === autoAddress) {
+        autoAddress = opt.dataset.address || '';
+        dest.value = autoAddress;
+      }
+      if (isNew) {
+        info.style.display = 'none';
+        if (priceHint) priceHint.style.display = 'none';
+      } else {
+        const bal = parseFloat(opt.dataset.balance) || 0;
+        info.style.display = '';
+        info.textContent = bal > 0 ? 'This customer currently owes you ' + money(bal) + '. It will be shown on the invoice.'
+          : bal < 0 ? 'This customer has paid ' + money(-bal) + ' ahead.'
+          : 'This customer has nothing outstanding.';
+        applyLastPrices();
+      }
+      paidTouched = false;
+      update();
+    }
+
+    sel.addEventListener('change', onCustomerChange);
+    rows.forEach(r => { r.qty.addEventListener('input', update); r.price.addEventListener('input', update); });
+    paid.addEventListener('input', () => { paidTouched = true; update(); });
+    if (opening) opening.addEventListener('input', update);
+    if (saveBox) saveBox.addEventListener('change', update);
+    document.getElementById('btn-full').addEventListener('click', () => { paidTouched = true; paid.value = billTotal(); update(); });
+    document.getElementById('btn-none').addEventListener('click', () => { paidTouched = true; paid.value = 0; update(); });
+    document.getElementById('btn-all').addEventListener('click', () => {
+      paidTouched = true; paid.value = Math.round((billTotal() + (parseFloat(selected().dataset.balance) || 0)) * 100) / 100; update();
+    });
+
+    // Initial state. A customer chosen via ?customer=ID on a fresh form gets their usual prices too.
+    if (sel.value !== '') {
+      const opt = selected();
+      const bal = parseFloat(opt.dataset.balance) || 0;
+      info.style.display = '';
+      info.textContent = bal > 0 ? 'This customer currently owes you ' + money(bal) + '. It will be shown on the invoice.'
+        : bal < 0 ? 'This customer has paid ' + money(-bal) + ' ahead.' : 'This customer has nothing outstanding.';
+      if (!dest.value) { autoAddress = opt.dataset.address || ''; dest.value = autoAddress; }
+      <% if (isFresh) { %>applyLastPrices();<% } %>
+    }
+    update();
+  })();
+</script>
 <%- include('../partials/footer') %>

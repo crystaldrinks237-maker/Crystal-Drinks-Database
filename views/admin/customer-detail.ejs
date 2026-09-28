@@ -1,0 +1,124 @@
+<%- include('../partials/header') %>
+<%- include('../partials/admin-nav', { active: 'customers' }) %>
+<div class="container">
+  <div class="top-actions">
+    <h1 style="margin:0">
+      <%= customer.name %>
+      <% if (!customer.active) { %><span class="badge badge-grey">Inactive</span><% } %>
+    </h1>
+    <div class="actions">
+      <a href="/admin/customers" class="btn btn-secondary">All customers</a>
+      <a href="/admin/customers/<%= customer.id %>/edit" class="btn btn-secondary">Edit</a>
+      <a href="/admin/deliveries/new?customer=<%= customer.id %>" class="btn">+ New delivery</a>
+    </div>
+  </div>
+
+  <% if (error) { %><div class="card"><div class="error" style="margin:0"><%= error %></div></div><% } %>
+
+  <div class="grid grid-3">
+    <div class="card stat">
+      <% if (customer.balance > 0) { %>
+        <div class="num text-red"><%= fmt(customer.balance) %></div>
+        <div class="label">Currently owes you</div>
+      <% } else if (customer.balance < 0) { %>
+        <div class="num text-green"><%= fmt(-customer.balance) %></div>
+        <div class="label">Credit (paid ahead)</div>
+      <% } else { %>
+        <div class="num text-green">0</div>
+        <div class="label">Nothing owed</div>
+      <% } %>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= fmt(totalBilled) %></div>
+      <div class="label">Total billed</div>
+    </div>
+    <div class="card stat">
+      <div class="num"><%= fmt(totalPaid) %></div>
+      <div class="label">Total paid</div>
+    </div>
+  </div>
+
+  <% if (customer.phone || customer.address || customer.notes) { %>
+    <div class="card">
+      <% if (customer.phone) { %><div><span class="muted">Phone:</span> <%= customer.phone %></div><% } %>
+      <% if (customer.address) { %><div><span class="muted">Address:</span> <%= customer.address %></div><% } %>
+      <% if (customer.notes) { %><div><span class="muted">Notes:</span> <%= customer.notes %></div><% } %>
+    </div>
+  <% } %>
+
+  <div class="card" id="payment">
+    <h2>Record a payment</h2>
+    <p class="muted" style="margin-top:-4px">Use this when the customer pays you money later, apart from a delivery. It comes off their balance straight away.</p>
+    <form method="POST" action="/admin/customers/<%= customer.id %>/payments">
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= today %>" required>
+        </div>
+        <div class="field">
+          <label>Amount received</label>
+          <input type="number" step="0.01" min="0.01" name="amount" id="pay-amount" required>
+        </div>
+        <div class="field">
+          <label>Note (optional)</label>
+          <input type="text" name="notes" placeholder="e.g. cash / bank transfer">
+        </div>
+      </div>
+      <div class="actions">
+        <button type="submit" class="btn btn-green">Save payment</button>
+        <% if (customer.balance > 0) { %>
+          <button type="button" class="btn btn-secondary" onclick="document.getElementById('pay-amount').value='<%= customer.balance %>'">Fill in full balance (<%= fmt(customer.balance) %>)</button>
+        <% } %>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Statement</h2>
+    <% if (ledger.length === 0) { %>
+      <p class="muted">Nothing recorded for this customer yet.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Date</th><th>Details</th><th>Billed</th><th>Paid</th><th>Balance</th><th></th></tr></thead>
+        <tbody>
+        <% ledger.forEach(e => { %>
+          <tr>
+            <td data-label="Date"><%= e.date || '-' %></td>
+            <td data-label="Details"><%= e.description %></td>
+            <td data-label="Billed"><%= e.billed ? fmt(e.billed) : '' %></td>
+            <td data-label="Paid"><%= e.paid ? fmt(e.paid) : '' %></td>
+            <td data-label="Balance">
+              <strong class="<%= e.balance > 0 ? 'text-red' : 'text-green' %>"><%= fmt(e.balance) %></strong>
+            </td>
+            <td data-label="">
+              <% if (e.kind === 'delivery') { %>
+                <a class="btn btn-sm" href="/admin/deliveries/<%= e.id %>/invoice/client">Client copy</a>
+                <a class="btn btn-sm btn-secondary" href="/admin/deliveries/<%= e.id %>/invoice/admin">Admin copy</a>
+              <% } else if (e.kind === 'payment') { %>
+                <form method="POST" action="/admin/customers/<%= customer.id %>/payments/<%= e.id %>"
+                  onsubmit="return confirm('Delete this payment? The customer\'s balance will go back up.')" style="display:inline">
+                  <input type="hidden" name="_method" value="DELETE">
+                  <button type="submit" class="btn btn-sm btn-red">Delete</button>
+                </form>
+              <% } %>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <p class="muted">Newest first. The balance column is what the customer owed right after that line.</p>
+    <% } %>
+  </div>
+
+  <% if (!hasHistory) { %>
+    <div class="card">
+      <h2>Delete this customer</h2>
+      <p class="muted" style="margin-top:-4px">Nothing has been recorded for them yet, so you can remove them (for example if you added them by mistake).</p>
+      <form method="POST" action="/admin/customers/<%= customer.id %>" onsubmit="return confirm('Delete this customer?')">
+        <input type="hidden" name="_method" value="DELETE">
+        <button type="submit" class="btn btn-red">Delete customer</button>
+      </form>
+    </div>
+  <% } %>
+</div>
+<%- include('../partials/footer') %>

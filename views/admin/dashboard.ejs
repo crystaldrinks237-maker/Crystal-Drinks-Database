@@ -44,6 +44,30 @@
   </div>
 
   <div class="card">
+    <div class="top-actions">
+      <h2 style="margin:0">Owed by customers: <span class="<%= totalOwed > 0 ? 'text-red' : 'text-green' %>"><%= fmt(totalOwed) %></span></h2>
+      <a href="/admin/customers" class="btn btn-sm btn-secondary">All customers</a>
+    </div>
+    <% if (topOwing.length === 0) { %>
+      <p class="muted">No customer owes you anything right now.</p>
+    <% } else { %>
+      <table>
+        <thead><tr><th>Customer</th><th>Owes you</th><th></th></tr></thead>
+        <tbody>
+        <% topOwing.forEach(c => { %>
+          <tr>
+            <td data-label="Customer"><a href="/admin/customers/<%= c.id %>"><%= c.name %></a></td>
+            <td data-label="Owes you"><strong class="text-red"><%= fmt(c.balance) %></strong></td>
+            <td data-label=""><a href="/admin/customers/<%= c.id %>#payment" class="btn btn-sm btn-green">Record payment</a></td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+      <% if (owingCount > topOwing.length) { %><p class="muted">Showing the <%= topOwing.length %> biggest of <%= owingCount %> customers who owe money.</p><% } %>
+    <% } %>
+  </div>
+
+  <div class="card">
     <h2>Today's attendance (<%= today %>)</h2>
     <% if (todaysAttendance.length === 0) { %>
       <p class="muted">No workers have logged attendance yet today.</p>
