@@ -112,14 +112,20 @@ CREATE TABLE IF NOT EXISTS deliveries (
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- Per-variant line items of one delivery
+-- Per-variant line items of one delivery.
+-- quantity is always in bottles - the true stock/record unit.
+-- crates/price_per_crate are filled in only when this row was entered as
+-- crates ("pets" of 6 bottles), purely so the invoice can show it the way it
+-- was agreed with the customer - quantity and subtotal are unaffected either way.
 CREATE TABLE IF NOT EXISTS delivery_items (
   id SERIAL PRIMARY KEY,
   delivery_id INTEGER NOT NULL REFERENCES deliveries(id) ON DELETE CASCADE,
   variant_id INTEGER REFERENCES bottle_variants(id),
   quantity INTEGER NOT NULL,
   price_per_bottle DECIMAL(12,2) NOT NULL,
-  subtotal DECIMAL(12,2) NOT NULL
+  subtotal DECIMAL(12,2) NOT NULL,
+  crates INTEGER,
+  price_per_crate DECIMAL(12,2)
 );
 
 CREATE TABLE IF NOT EXISTS expenses (

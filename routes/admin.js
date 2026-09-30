@@ -11,6 +11,8 @@ const { activeVariants, allVariantsIncludingInactive, getProductionMap, saveAtte
 const { ensureAllVariantsExist } = require('../lib/migrate');
 const { round2, listCustomersWithBalances, getBalance, findCustomerByName } = require('../lib/customerService');
 
+const BOTTLES_PER_CRATE = 6; // a "pet" the way this business talks about it
+
 router.use(requireAdmin);
 router.use('/customers', require('./customers'));
 
@@ -406,7 +408,7 @@ async function deliveryFormData(req, extra = {}) {
   const customers = (await listCustomersWithBalances()).filter(c => c.active);
 
   const [priceRows] = await pool.query(`
-    SELECT d.customer_id, di.variant_id, di.price_per_bottle
+    SELECT d.customer_id, di.variant_id, di.price_per_bottle, di.crates, di.price_per_crate
     FROM delivery_items di
     JOIN deliveries d ON d.id = di.delivery_id
     WHERE di.id IN (
@@ -417,13 +419,17 @@ async function deliveryFormData(req, extra = {}) {
       GROUP BY d2.customer_id, di2.variant_id
     )
   `);
+  // Remembers whichever unit (bottles or crates) the customer was last billed in for
+  // each bottle type, so the form can default back into it and prefill that price.
   const lastPrices = {};
   priceRows.forEach(r => {
-    (lastPrices[r.customer_id] = lastPrices[r.customer_id] || {})[r.variant_id] = r.price_per_bottle;
+    (lastPrices[r.customer_id] = lastPrices[r.customer_id] || {})[r.variant_id] = r.crates
+      ? { unit: 'crate', price: r.price_per_crate }
+      : { unit: 'bottle', price: r.price_per_bottle };
   });
 
   return {
-    user: req.session.user, variants, customers, lastPrices,
+    user: req.session.user, variants, customers, lastPrices, BOTTLES_PER_CRATE,
     error: null, form: null, selectedCustomerId: '', ...extra
   };
 }
@@ -450,10 +456,22 @@ router.post('/deliveries', async (req, res, next) => {
       variants, error, form: req.body, selectedCustomerId: customer_id || ''
     }));
 
+    // Each row can be entered either in bottles or in crates ("pets" of 6) - whichever
+    // matches how the price was agreed with the customer. Either way the amount for that
+    // row is just quantity-entered x price-entered, so the money is always exact; only
+    // the bottle count (the stock/record unit) needs converting when it's crates.
     const items = variants.map(v => {
-      const quantity = parseInt(req.body['qty_' + v.id], 10) || 0;
-      const price = parseFloat(req.body['price_' + v.id]) || 0;
-      return { variantId: v.id, quantity, price, subtotal: round2(quantity * price) };
+      const unit = req.body['unit_' + v.id] === 'crate' ? 'crate' : 'bottle';
+      const enteredQty = parseInt(req.body['qty_' + v.id], 10) || 0;
+      const enteredPrice = parseFloat(req.body['price_' + v.id]) || 0;
+      const quantity = unit === 'crate' ? enteredQty * BOTTLES_PER_CRATE : enteredQty;
+      const subtotal = round2(enteredQty * enteredPrice);
+      return {
+        variantId: v.id, quantity, subtotal,
+        pricePerBottle: quantity > 0 ? round2(subtotal / quantity) : 0,
+        crates: unit === 'crate' ? enteredQty : null,
+        pricePerCrate: unit === 'crate' ? enteredPrice : null
+      };
     }).filter(i => i.quantity > 0);
 
     if (items.length === 0) {
@@ -521,8 +539,8 @@ router.post('/deliveries', async (req, res, next) => {
         const deliveryId = rows[0].id;
         for (const i of items) {
           await q(
-            'INSERT INTO delivery_items (delivery_id, variant_id, quantity, price_per_bottle, subtotal) VALUES (?, ?, ?, ?, ?)',
-            [deliveryId, i.variantId, i.quantity, i.price, i.subtotal]
+            'INSERT INTO delivery_items (delivery_id, variant_id, quantity, price_per_bottle, subtotal, crates, price_per_crate) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [deliveryId, i.variantId, i.quantity, i.pricePerBottle, i.subtotal, i.crates, i.pricePerCrate]
           );
         }
 

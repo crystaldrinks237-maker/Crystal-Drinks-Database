@@ -77,18 +77,31 @@
         <p class="muted">No active bottle types yet - add them under Products first.</p>
       <% } else { %>
         <table style="margin-bottom:12px">
-          <thead><tr><th>Type</th><th>Quality</th><th>Quantity</th><th>Price per bottle</th></tr></thead>
+          <thead><tr><th>Type</th><th>Quality</th><th>Sold as</th><th>Quantity</th><th>Price</th><th></th></tr></thead>
           <tbody>
-          <% variants.forEach(vr => { %>
+          <% variants.forEach(vr => { const u = v('unit_' + vr.id, 'crate'); %>
             <tr data-variant="<%= vr.id %>">
               <td data-label="Type"><%= vr.type_name %></td>
               <td data-label="Quality"><%= vr.quality_name %></td>
-              <td data-label="Quantity"><input type="number" name="qty_<%= vr.id %>" min="0" value="<%= v('qty_' + vr.id, 0) %>" style="max-width:100px"></td>
-              <td data-label="Price per bottle"><input type="number" step="0.01" name="price_<%= vr.id %>" min="0" value="<%= v('price_' + vr.id, 0) %>" style="max-width:120px"></td>
+              <td data-label="Sold as">
+                <select name="unit_<%= vr.id %>" class="unit-select" style="width:100px">
+                  <option value="crate" <%= u !== 'bottle' ? 'selected' : '' %>>Pets</option>
+                  <option value="bottle" <%= u === 'bottle' ? 'selected' : '' %>>Bottles</option>
+                </select>
+              </td>
+              <td data-label="Quantity"><input type="number" name="qty_<%= vr.id %>" min="0" class="qty-input" value="<%= v('qty_' + vr.id, 0) %>" style="max-width:90px"></td>
+              <td data-label="Price">
+                <div style="display:flex; align-items:center; gap:5px; flex-wrap:nowrap">
+                  <input type="number" step="0.01" name="price_<%= vr.id %>" min="0" class="price-input" value="<%= v('price_' + vr.id, 0) %>" style="max-width:95px">
+                  <span class="muted price-unit" style="font-size:0.8rem; white-space:nowrap"></span>
+                </div>
+              </td>
+              <td data-label=""><span class="muted row-readout" style="font-size:0.82rem; white-space:nowrap"></span></td>
             </tr>
           <% }) %>
           </tbody>
         </table>
+        <p class="hint"><strong>Pets</strong> = crates of 6 bottles. Pick it and enter the price you agreed per crate - the bottle count and per-bottle price are worked out for you. Switch a row to <strong>Bottles</strong> if you're pricing that one individually.</p>
         <p class="hint" id="price-hint" style="margin-top:-6px; display:none">Prices were filled in from this customer's last delivery. Change them if today's prices are different.</p>
       <% } %>
 
@@ -136,10 +149,14 @@
     const saveBox = document.getElementById('save_customer');
     const trackHint = document.getElementById('track-hint');
     const priceHint = document.getElementById('price-hint');
+    const PER_CRATE = <%= BOTTLES_PER_CRATE %>;
     const rows = Array.from(document.querySelectorAll('tr[data-variant]')).map(tr => ({
       id: tr.dataset.variant,
-      qty: tr.querySelector('input[name^="qty_"]'),
-      price: tr.querySelector('input[name^="price_"]')
+      unit: tr.querySelector('.unit-select'),
+      qty: tr.querySelector('.qty-input'),
+      price: tr.querySelector('.price-input'),
+      unitLabel: tr.querySelector('.price-unit'),
+      readout: tr.querySelector('.row-readout')
     }));
 
     const money = n => { n = Math.round(n * 100) / 100; return Number.isInteger(n) ? String(n) : n.toFixed(2); };
@@ -155,11 +172,30 @@
       let prices = {};
       try { prices = JSON.parse(selected().dataset.prices || '{}'); } catch (e) {}
       let any = false;
-      rows.forEach(r => { if (prices[r.id] !== undefined) { r.price.value = prices[r.id]; any = true; } });
+      rows.forEach(r => {
+        const p = prices[r.id];
+        if (p) { r.unit.value = p.unit; r.price.value = p.price; any = true; }
+      });
       if (priceHint) priceHint.style.display = any ? '' : 'none';
+      rows.forEach(updateRow);
+    }
+
+    // Keeps one row's "= N bottles · x.xx/bottle" readout and price-field suffix in sync.
+    function updateRow(r) {
+      const isCrate = r.unit.value === 'crate';
+      r.unitLabel.textContent = isCrate ? '/ pet' : '/ bottle';
+      const qty = num(r.qty), price = num(r.price);
+      if (isCrate && qty > 0) {
+        const bottles = qty * PER_CRATE;
+        const perBottle = price > 0 ? Math.round((price / PER_CRATE) * 100) / 100 : 0;
+        r.readout.textContent = '= ' + bottles + ' bottle' + (bottles === 1 ? '' : 's') + (price > 0 ? ' · ' + money(perBottle) + '/bottle' : '');
+      } else {
+        r.readout.textContent = '';
+      }
     }
 
     function update() {
+      rows.forEach(updateRow);
       const isNew = sel.value === '';
       newFields.style.display = isNew ? '' : 'none';
       newFields.querySelectorAll('input').forEach(i => { i.disabled = !isNew; });
@@ -216,7 +252,11 @@
     }
 
     sel.addEventListener('change', onCustomerChange);
-    rows.forEach(r => { r.qty.addEventListener('input', update); r.price.addEventListener('input', update); });
+    rows.forEach(r => {
+      r.qty.addEventListener('input', update);
+      r.price.addEventListener('input', update);
+      r.unit.addEventListener('change', update);
+    });
     paid.addEventListener('input', () => { paidTouched = true; update(); });
     if (opening) opening.addEventListener('input', update);
     if (saveBox) saveBox.addEventListener('change', update);

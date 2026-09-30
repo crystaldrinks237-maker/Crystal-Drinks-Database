@@ -106,6 +106,12 @@ change this immediately in Settings, same as on the hosted version.
     Settings (92 = Pakistan) so numbers like 0311-1234567 work.
   - A new customer who doesn't pay in full is saved automatically so the
     unpaid amount is never lost. One-time customers who pay in full are not saved.
+  - **Pets (crates of 6)**: each row on the delivery form can be entered as
+    Pets or Bottles. Pick Pets, enter the quantity of crates and the price you
+    agreed *per crate*, and the app works out the bottle count and the
+    per-bottle price for you - no more dividing by 6 on a calculator. The
+    invoice shows it the same way ("3 pets (18)" at "100.00/pet"). Mixing a
+    pet-priced row with a plain-bottle row on the same delivery is fine.
   - Balances are always calculated from the records, so deleting a delivery or a
     payment fixes the balance by itself. Printed invoices keep the balance as it was
     on the day.
