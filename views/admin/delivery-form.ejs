@@ -80,7 +80,7 @@
           <thead><tr><th>Type</th><th>Quality</th><th>Sold as</th><th>Quantity</th><th>Price</th><th></th></tr></thead>
           <tbody>
           <% variants.forEach(vr => { const u = v('unit_' + vr.id, 'crate'); %>
-            <tr data-variant="<%= vr.id %>">
+            <tr data-variant="<%= vr.id %>" data-per-pet="<%= vr.bottles_per_pet || 6 %>">
               <td data-label="Type"><%= vr.type_name %></td>
               <td data-label="Quality"><%= vr.quality_name %></td>
               <td data-label="Sold as">
@@ -101,7 +101,7 @@
           <% }) %>
           </tbody>
         </table>
-        <p class="hint"><strong>Pets</strong> = crates of 6 bottles. Pick it and enter the price you agreed per crate - the bottle count and per-bottle price are worked out for you. Switch a row to <strong>Bottles</strong> if you're pricing that one individually.</p>
+        <p class="hint"><strong>Pets</strong> = crates of 6 bottles (12 for 500ml). Pick it and enter the price you agreed per crate - the bottle count and per-bottle price are worked out for you. Switch a row to <strong>Bottles</strong> if you're pricing that one individually.</p>
         <p class="hint" id="price-hint" style="margin-top:-6px; display:none">Prices were filled in from this customer's last delivery. Change them if today's prices are different.</p>
       <% } %>
 
@@ -149,9 +149,9 @@
     const saveBox = document.getElementById('save_customer');
     const trackHint = document.getElementById('track-hint');
     const priceHint = document.getElementById('price-hint');
-    const PER_CRATE = <%= BOTTLES_PER_CRATE %>;
     const rows = Array.from(document.querySelectorAll('tr[data-variant]')).map(tr => ({
       id: tr.dataset.variant,
+      perPet: parseInt(tr.dataset.perPet, 10) || 6,
       unit: tr.querySelector('.unit-select'),
       qty: tr.querySelector('.qty-input'),
       price: tr.querySelector('.price-input'),
@@ -183,11 +183,11 @@
     // Keeps one row's "= N bottles · x.xx/bottle" readout and price-field suffix in sync.
     function updateRow(r) {
       const isCrate = r.unit.value === 'crate';
-      r.unitLabel.textContent = isCrate ? '/ pet' : '/ bottle';
+      r.unitLabel.textContent = isCrate ? '/ pet (' + r.perPet + ')' : '/ bottle';
       const qty = num(r.qty), price = num(r.price);
       if (isCrate && qty > 0) {
-        const bottles = qty * PER_CRATE;
-        const perBottle = price > 0 ? Math.round((price / PER_CRATE) * 100) / 100 : 0;
+        const bottles = qty * r.perPet;
+        const perBottle = price > 0 ? Math.round((price / r.perPet) * 100) / 100 : 0;
         r.readout.textContent = '= ' + bottles + ' bottle' + (bottles === 1 ? '' : 's') + (price > 0 ? ' · ' + money(perBottle) + '/bottle' : '');
       } else {
         r.readout.textContent = '';

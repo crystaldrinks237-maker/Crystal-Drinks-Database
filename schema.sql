@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS bottle_types (
   id SERIAL PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
   active SMALLINT NOT NULL DEFAULT 1,
+  bottles_per_pet INTEGER NOT NULL DEFAULT 6,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -115,7 +116,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
 -- Per-variant line items of one delivery.
 -- quantity is always in bottles - the true stock/record unit.
 -- crates/price_per_crate are filled in only when this row was entered as
--- crates ("pets" of 6 bottles), purely so the invoice can show it the way it
+-- crates ("pets" of 6 or 12 bottles), purely so the invoice can show it the way it
 -- was agreed with the customer - quantity and subtotal are unaffected either way.
 CREATE TABLE IF NOT EXISTS delivery_items (
   id SERIAL PRIMARY KEY,

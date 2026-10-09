@@ -11,7 +11,7 @@ const { activeVariants, allVariantsIncludingInactive, getProductionMap, saveAtte
 const { ensureAllVariantsExist } = require('../lib/migrate');
 const { round2, listCustomersWithBalances, getBalance, findCustomerByName } = require('../lib/customerService');
 
-const BOTTLES_PER_CRATE = 6; // a "pet" the way this business talks about it
+// A "pet" is a crate; how many bottles it holds depends on the type (bottle_types.bottles_per_pet).
 
 router.use(requireAdmin);
 router.use('/customers', require('./customers'));
@@ -333,9 +333,10 @@ router.get('/products', async (req, res, next) => {
 router.post('/products/types', async (req, res, next) => {
   try {
     const { name } = req.body;
+    const perPet = Math.max(1, parseInt(req.body.bottles_per_pet, 10) || 6);
     if (name && name.trim()) {
       try {
-        await pool.query('INSERT INTO bottle_types (name) VALUES (?)', [name.trim()]);
+        await pool.query('INSERT INTO bottle_types (name, bottles_per_pet) VALUES (?, ?)', [name.trim(), perPet]);
         await ensureAllVariantsExist(pool);
       } catch (e) {
         if (e.code !== '23505') throw e; // duplicate name, ignore
@@ -348,7 +349,8 @@ router.post('/products/types', async (req, res, next) => {
 router.post('/products/types/:id', async (req, res, next) => {
   try {
     const { name, active } = req.body;
-    await pool.query('UPDATE bottle_types SET name = ?, active = ? WHERE id = ?', [name, active ? 1 : 0, req.params.id]);
+    const perPet = Math.max(1, parseInt(req.body.bottles_per_pet, 10) || 6);
+    await pool.query('UPDATE bottle_types SET name = ?, active = ?, bottles_per_pet = ? WHERE id = ?', [name, active ? 1 : 0, perPet, req.params.id]);
     res.redirect('/admin/products');
   } catch (err) { next(err); }
 });
@@ -429,7 +431,7 @@ async function deliveryFormData(req, extra = {}) {
   });
 
   return {
-    user: req.session.user, variants, customers, lastPrices, BOTTLES_PER_CRATE,
+    user: req.session.user, variants, customers, lastPrices,
     error: null, form: null, selectedCustomerId: '', ...extra
   };
 }
@@ -456,7 +458,7 @@ router.post('/deliveries', async (req, res, next) => {
       variants, error, form: req.body, selectedCustomerId: customer_id || ''
     }));
 
-    // Each row can be entered either in bottles or in crates ("pets" of 6) - whichever
+    // Each row can be entered either in bottles or in crates ("pets", 6 or 12 bottles depending on the type) - whichever
     // matches how the price was agreed with the customer. Either way the amount for that
     // row is just quantity-entered x price-entered, so the money is always exact; only
     // the bottle count (the stock/record unit) needs converting when it's crates.
@@ -464,7 +466,8 @@ router.post('/deliveries', async (req, res, next) => {
       const unit = req.body['unit_' + v.id] === 'crate' ? 'crate' : 'bottle';
       const enteredQty = parseInt(req.body['qty_' + v.id], 10) || 0;
       const enteredPrice = parseFloat(req.body['price_' + v.id]) || 0;
-      const quantity = unit === 'crate' ? enteredQty * BOTTLES_PER_CRATE : enteredQty;
+      const perPet = v.bottles_per_pet || 6;
+      const quantity = unit === 'crate' ? enteredQty * perPet : enteredQty;
       const subtotal = round2(enteredQty * enteredPrice);
       return {
         variantId: v.id, quantity, subtotal,

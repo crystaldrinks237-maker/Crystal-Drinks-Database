@@ -16,6 +16,9 @@
           <div class="field" style="flex:2;margin-bottom:0">
             <input type="text" name="name" value="<%= t.name %>">
           </div>
+          <label style="display:flex;align-items:center;gap:4px;width:auto;margin-bottom:0;white-space:nowrap">
+            <input type="number" name="bottles_per_pet" min="1" value="<%= t.bottles_per_pet || 6 %>" style="width:64px"> / pet
+          </label>
           <label style="display:flex;align-items:center;gap:6px;width:auto;margin-bottom:0">
             <input type="checkbox" name="active" style="width:auto" <%= t.active ? 'checked' : '' %>> Active
           </label>
@@ -26,6 +29,10 @@
         <div class="field">
           <label>Add a new type</label>
           <input type="text" name="name" placeholder="e.g. 19L Cooler" required>
+        </div>
+        <div class="field" style="max-width:110px">
+          <label>Bottles / pet</label>
+          <input type="number" name="bottles_per_pet" min="1" value="6">
         </div>
         <button type="submit" class="btn">+ Add type</button>
       </form>
