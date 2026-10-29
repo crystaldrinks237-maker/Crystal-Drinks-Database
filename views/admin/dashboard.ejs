@@ -3,13 +3,18 @@
 <div class="container">
   <h1>Overview</h1>
 
-  <% if (lowEmpty || lowFilled) { %>
+  <% if (lowEmpty || lowFilled || lowMaterials.length > 0) { %>
     <div class="card" style="border-color:#f59e0b; background:#fffbeb;">
       <strong style="color:#92400e;">⚠ Low stock warning</strong>
       <ul style="margin:8px 0 0; padding-left:18px; color:#92400e;">
         <% if (lowEmpty) { %><li>Empty bottles: <%= emptyStock %> left (below your threshold of <%= lowStockEmptyThreshold %>)</li><% } %>
         <% if (lowFilled) { %><li>Filled bottles ready to deliver: <%= filledStock %> left (below your threshold of <%= lowStockFilledThreshold %>)</li><% } %>
+        <% lowMaterials.forEach(m => { %><li><%= m.name %>: <%= fmtQty(m.stock, m.unit) %> <%= m.unit %> left (below your warning level of <%= fmtQty(m.low_stock_threshold, m.unit) %>)</li><% }) %>
       </ul>
+      <% if (emptyStock < 0 || filledStock < 0) { %>
+        <p style="margin:10px 0 0; color:#92400e;">A negative number means stock you had before you started using this system was never entered.
+          <a href="/admin/inventory#adjust">Enter your opening stock</a> to fix it.</p>
+      <% } %>
     </div>
   <% } %>
 
@@ -34,7 +39,7 @@
       <div class="label">Total wages paid</div>
     </div>
     <div class="card stat">
-      <div class="num"><%= (totalExpenses + totalBottleCost).toFixed(0) %></div>
+      <div class="num"><%= totalExpenses.toFixed(0) %></div>
       <div class="label">Total other expenses</div>
     </div>
     <div class="card stat">
@@ -42,6 +47,17 @@
       <div class="label">Estimated net (revenue - wages - expenses)</div>
     </div>
   </div>
+
+  <% if (materials.length > 0) { %>
+  <div class="grid grid-3">
+    <% materials.forEach(m => { %>
+      <div class="card stat">
+        <div class="num" style="<%= m.low || m.stock < 0 ? 'color:#dc2626' : '' %>"><%= fmtQty(m.stock, m.unit) %> <span style="font-size:0.9rem"><%= m.unit %></span></div>
+        <div class="label"><%= m.name %> in stock</div>
+      </div>
+    <% }) %>
+  </div>
+  <% } %>
 
   <div class="card">
     <div class="top-actions">

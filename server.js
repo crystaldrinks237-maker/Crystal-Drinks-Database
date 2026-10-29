@@ -20,6 +20,9 @@ app.locals.fmt = n => {
   return Number.isInteger(v) ? String(v) : v.toFixed(2);
 };
 
+// Shows a material quantity: kg with up to 3 decimals, pcs as whole numbers.
+app.locals.fmtQty = require('./lib/stockService').fmtQty;
+
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 

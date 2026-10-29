@@ -3,15 +3,25 @@
 <div class="container">
   <h1>Inventory</h1>
 
+  <% if (error) { %>
+    <div class="card" style="border-color:#dc2626; background:#fef2f2; color:#991b1b;"><%= error %></div>
+  <% } %>
+
   <div class="grid grid-3">
     <div class="card stat">
-      <div class="num"><%= emptyStock %></div>
+      <div class="num <%= emptyStock < 0 ? 'text-red' : '' %>"><%= emptyStock %></div>
       <div class="label">Empty bottles in stock (all types)</div>
     </div>
     <div class="card stat">
-      <div class="num"><%= filledStock %></div>
+      <div class="num <%= filledStock < 0 ? 'text-red' : '' %>"><%= filledStock %></div>
       <div class="label">Filled bottles ready to deliver (all types)</div>
     </div>
+    <% materials.filter(m => m.active).forEach(m => { %>
+      <div class="card stat">
+        <div class="num <%= m.low || m.stock < 0 ? 'text-red' : '' %>"><%= fmtQty(m.stock, m.unit) %> <span style="font-size:0.9rem"><%= m.unit %></span></div>
+        <div class="label"><%= m.name %> in stock</div>
+      </div>
+    <% }) %>
   </div>
 
   <div class="card">
@@ -23,13 +33,90 @@
         <tr>
           <td data-label="Type"><%= v.type_name %><%= v.active ? '' : ' (inactive)' %></td>
           <td data-label="Quality"><%= v.quality_name %></td>
-          <td data-label="Empty stock"><%= v.emptyStock %></td>
-          <td data-label="Filled stock"><%= v.filledStock %></td>
+          <td data-label="Empty stock" class="<%= v.emptyStock < 0 ? 'text-red' : '' %>"><%= v.emptyStock %></td>
+          <td data-label="Filled stock" class="<%= v.filledStock < 0 ? 'text-red' : '' %>"><%= v.filledStock %></td>
         </tr>
       <% }) %>
       </tbody>
     </table>
     <% if (byVariant.length === 0) { %><p class="muted">Add bottle types and qualities under Products first.</p><% } %>
+  </div>
+
+  <div class="card" id="adjust">
+    <h2>Opening stock &amp; stock count</h2>
+    <p class="muted" style="margin-top:-6px">
+      Use this for stock you already had before you started using this system, or to correct a number after
+      counting what is really on the shelf. It only changes the stock numbers &mdash; it does not touch your
+      expenses or revenue. Pick <strong>Set stock to actual count</strong> and type what you physically
+      have; the system works out the difference itself. Any red (negative) number above should be fixed this way.
+    </p>
+    <form method="POST" action="/admin/inventory/adjust">
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= new Date().toISOString().slice(0,10) %>" required>
+        </div>
+        <div class="field">
+          <label>Type / Quality</label>
+          <select name="variant_id" required>
+            <% allVariants.forEach(v => { %>
+              <option value="<%= v.id %>"><%= v.type_name %> / <%= v.quality_name %><%= v.active ? '' : ' (inactive)' %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="field">
+          <label>Which stock</label>
+          <select name="kind">
+            <option value="filled">Filled bottles (ready to deliver)</option>
+            <option value="empty">Empty bottles</option>
+          </select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>What to do</label>
+          <select name="mode">
+            <option value="set_to">Set stock to actual count</option>
+            <option value="add">Add to / remove from stock (use a minus to remove)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantity (bottles)</label>
+          <input type="number" name="quantity" step="1" required>
+        </div>
+        <div class="field">
+          <label>Notes (optional)</label>
+          <input type="text" name="notes" placeholder="e.g. Opening stock before using the system">
+        </div>
+      </div>
+      <button type="submit" class="btn">Save stock correction</button>
+    </form>
+
+    <% if (adjustments.length > 0) { %>
+      <h3 style="margin-top:20px">Corrections made so far</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Quality</th><th>Stock</th><th>Change</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+        <% adjustments.forEach(a => { %>
+          <tr>
+            <td data-label="Date"><%= a.date %></td>
+            <td data-label="Type"><%= a.type_name %></td>
+            <td data-label="Quality"><%= a.quality_name %></td>
+            <td data-label="Stock"><%= a.kind === 'filled' ? 'Filled' : 'Empty' %></td>
+            <td data-label="Change" class="<%= a.quantity < 0 ? 'text-red' : 'text-green' %>"><%= a.quantity > 0 ? '+' : '' %><%= a.quantity %></td>
+            <td data-label="Notes"><%= a.notes || '-' %></td>
+            <td data-label="">
+              <form method="POST" action="/admin/inventory/adjust/<%= a.id %>"
+                onsubmit="return confirm('Delete this correction? The stock number will go back to what it was before.')" style="display:inline">
+                <input type="hidden" name="_method" value="DELETE">
+                <button type="submit" class="btn btn-sm btn-red">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
   </div>
 
   <div class="card">
@@ -104,5 +191,202 @@
     </table>
     <% if (purchases.length === 0) { %><p class="muted">No purchases recorded yet.</p><% } %>
   </div>
+
+  <h1 id="materials" style="margin-top:32px">PET sheets, labels &amp; caps</h1>
+
+  <div class="card">
+    <h2>Materials</h2>
+    <p class="muted" style="margin-top:-6px">
+      Stock = what you bought + opening stock &minus; what you used or wasted. Set a warning level and the
+      dashboard will warn you when stock drops below it (leave it at 0 for no warning).
+    </p>
+    <% materials.forEach(m => { %>
+      <form method="POST" action="/admin/inventory/materials/<%= m.id %>/update" class="row" style="align-items:center;margin-bottom:8px">
+        <div class="field" style="flex:2;margin-bottom:0">
+          <input type="text" name="name" value="<%= m.name %>">
+        </div>
+        <div style="min-width:130px">
+          <strong class="<%= m.low || m.stock < 0 ? 'text-red' : '' %>"><%= fmtQty(m.stock, m.unit) %> <%= m.unit %></strong>
+          <span class="muted">in stock</span>
+        </div>
+        <label style="display:flex;align-items:center;gap:4px;width:auto;margin-bottom:0;white-space:nowrap">
+          Warn below <input type="number" name="low_stock_threshold" min="0" step="<%= m.unit === 'pcs' ? 1 : 0.001 %>" value="<%= fmtQty(m.low_stock_threshold, m.unit) %>" style="width:90px"> <%= m.unit %>
+        </label>
+        <label style="display:flex;align-items:center;gap:6px;width:auto;margin-bottom:0">
+          <input type="checkbox" name="active" style="width:auto" <%= m.active ? 'checked' : '' %>> Active
+        </label>
+        <button type="submit" class="btn btn-sm">Save</button>
+      </form>
+    <% }) %>
+    <form method="POST" action="/admin/inventory/materials" class="row" style="align-items:flex-end;margin-top:14px">
+      <div class="field">
+        <label>Add another material</label>
+        <input type="text" name="name" placeholder="e.g. Shrink wrap" required>
+      </div>
+      <div class="field" style="max-width:160px">
+        <label>Counted in</label>
+        <select name="unit">
+          <option value="kg">Kilograms (kg)</option>
+          <option value="pcs">Pieces (pcs)</option>
+        </select>
+      </div>
+      <button type="submit" class="btn">+ Add material</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Record material purchase</h2>
+    <p class="muted" style="margin-top:-6px">Adds to stock and logs the cost under Expenses automatically.</p>
+    <form method="POST" action="/admin/inventory/materials/purchase">
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= new Date().toISOString().slice(0,10) %>" required>
+        </div>
+        <div class="field">
+          <label>Material</label>
+          <select name="material_id" class="material-select" required>
+            <% materials.filter(m => m.active).forEach(m => { %>
+              <option value="<%= m.id %>" data-unit="<%= m.unit %>"><%= m.name %> (<%= m.unit %>)</option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantity bought (<span class="unit-label">kg</span>)</label>
+          <input type="number" name="quantity" class="qty-input" min="0.001" step="0.001" required>
+        </div>
+        <div class="field">
+          <label>Total cost</label>
+          <input type="number" step="0.01" min="0" name="cost_total" required>
+        </div>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Supplier (optional)</label>
+          <input type="text" name="supplier">
+        </div>
+        <div class="field">
+          <label>Notes (optional)</label>
+          <input type="text" name="notes">
+        </div>
+      </div>
+      <button type="submit" class="btn">Add purchase</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Opening stock, usage &amp; corrections</h2>
+    <p class="muted" style="margin-top:-6px">
+      Enter what you already had before using the system as <strong>Opening stock</strong>. Record what the
+      production used as <strong>Used in production</strong>. Type a plain positive number for opening, used
+      and wasted; only <strong>Correction</strong> takes a minus sign.
+    </p>
+    <form method="POST" action="/admin/inventory/materials/adjust">
+      <div class="row">
+        <div class="field">
+          <label>Date</label>
+          <input type="date" name="date" value="<%= new Date().toISOString().slice(0,10) %>" required>
+        </div>
+        <div class="field">
+          <label>Material</label>
+          <select name="material_id" class="material-select" required>
+            <% materials.filter(m => m.active).forEach(m => { %>
+              <option value="<%= m.id %>" data-unit="<%= m.unit %>"><%= m.name %> (<%= m.unit %>)</option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="field">
+          <label>What happened</label>
+          <select name="reason">
+            <option value="opening">Opening stock (had before using the system)</option>
+            <option value="used">Used in production</option>
+            <option value="wasted">Wasted / damaged</option>
+            <option value="correction">Correction after counting (+ or &minus;)</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Quantity (<span class="unit-label">kg</span>)</label>
+          <input type="number" name="quantity" class="qty-input" step="0.001" required>
+        </div>
+      </div>
+      <div class="field">
+        <label>Notes (optional)</label>
+        <input type="text" name="notes">
+      </div>
+      <button type="submit" class="btn">Save</button>
+    </form>
+
+    <% if (materialAdjustments.length > 0) { %>
+      <h3 style="margin-top:20px">Opening stock, usage &amp; corrections so far</h3>
+      <table>
+        <thead><tr><th>Date</th><th>Material</th><th>What happened</th><th>Change</th><th>Notes</th><th></th></tr></thead>
+        <tbody>
+        <% const reasonLabels = { opening: 'Opening stock', used: 'Used in production', wasted: 'Wasted / damaged', correction: 'Correction' }; %>
+        <% materialAdjustments.forEach(a => { %>
+          <tr>
+            <td data-label="Date"><%= a.date %></td>
+            <td data-label="Material"><%= a.material_name %></td>
+            <td data-label="What happened"><%= reasonLabels[a.reason] || a.reason %></td>
+            <td data-label="Change" class="<%= a.quantity < 0 ? 'text-red' : 'text-green' %>"><%= a.quantity > 0 ? '+' : '' %><%= fmtQty(a.quantity, a.unit) %> <%= a.unit %></td>
+            <td data-label="Notes"><%= a.notes || '-' %></td>
+            <td data-label="">
+              <form method="POST" action="/admin/inventory/materials/adjust/<%= a.id %>"
+                onsubmit="return confirm('Delete this entry? The stock number will go back to what it was before.')" style="display:inline">
+                <input type="hidden" name="_method" value="DELETE">
+                <button type="submit" class="btn btn-sm btn-red">Delete</button>
+              </form>
+            </td>
+          </tr>
+        <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <div class="card">
+    <div class="top-actions">
+      <h2 style="margin:0">Material purchase history</h2>
+      <a href="/admin/inventory/materials/export.csv" class="btn btn-sm btn-secondary">Export (CSV)</a>
+    </div>
+    <table>
+      <thead><tr><th>Date</th><th>Material</th><th>Quantity</th><th>Cost</th><th>Supplier</th><th></th></tr></thead>
+      <tbody>
+      <% materialPurchases.forEach(p => { %>
+        <tr>
+          <td data-label="Date"><%= p.date %></td>
+          <td data-label="Material"><%= p.material_name %></td>
+          <td data-label="Quantity"><%= fmtQty(p.quantity, p.unit) %> <%= p.unit %></td>
+          <td data-label="Cost"><%= p.cost_total.toFixed(0) %></td>
+          <td data-label="Supplier"><%= p.supplier || '-' %></td>
+          <td data-label="">
+            <form method="POST" action="/admin/inventory/materials/purchase/<%= p.id %>"
+              onsubmit="return confirm('Delete this purchase? Its cost is removed from Expenses too.')" style="display:inline">
+              <input type="hidden" name="_method" value="DELETE">
+              <button type="submit" class="btn btn-sm btn-red">Delete</button>
+            </form>
+          </td>
+        </tr>
+      <% }) %>
+      </tbody>
+    </table>
+    <% if (materialPurchases.length === 0) { %><p class="muted">No material purchases recorded yet.</p><% } %>
+  </div>
 </div>
+
+<script>
+  // Shows the chosen material's unit (kg / pcs) next to the quantity box, and only allows
+  // fractions for kg.
+  document.querySelectorAll('.material-select').forEach(sel => {
+    const form = sel.closest('form');
+    const apply = () => {
+      const unit = (sel.options[sel.selectedIndex] || {}).dataset.unit || 'kg';
+      form.querySelector('.unit-label').textContent = unit;
+      const qty = form.querySelector('.qty-input');
+      qty.step = unit === 'pcs' ? '1' : '0.001';
+      if (qty.hasAttribute('min')) qty.min = unit === 'pcs' ? '1' : '0.001';
+    };
+    sel.addEventListener('change', apply);
+    apply();
+  });
+</script>
 <%- include('../partials/footer') %>

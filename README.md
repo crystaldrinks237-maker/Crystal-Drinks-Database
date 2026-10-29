@@ -83,6 +83,15 @@ change this immediately in Settings, same as on the hosted version.
   screen. Entries show whether a worker or the admin logged them.
 - **Inventory** tab: record every time you buy empty bottles, per type/quality
   (cost auto-logs as an expense); see current empty & filled stock for each one.
+  - **Opening stock & stock count**: stock you already had before you started
+    using the system goes here (otherwise the numbers go negative). Choose
+    "Set stock to actual count", type what is really on the shelf, and the
+    system records the difference. These corrections change stock numbers only,
+    never expenses or revenue.
+  - **PET sheets, labels & caps**: PET sheets and labels are counted in kg, caps
+    in pieces. Record purchases (cost auto-logs as an expense), opening stock,
+    what production used, and wastage. Set a "warn below" level per material to
+    get a dashboard warning. You can add more materials (e.g. shrink wrap).
 - **Deliveries & Invoices** tab: log each delivery with a quantity and price
   per bottle type/quality (leave any row at 0 to skip it) — this instantly
   gives you an invoice number and two PDF buttons: "Client copy" (clean,

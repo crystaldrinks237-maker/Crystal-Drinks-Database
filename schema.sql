@@ -132,9 +132,61 @@ CREATE TABLE IF NOT EXISTS delivery_items (
 CREATE TABLE IF NOT EXISTS expenses (
   id SERIAL PRIMARY KEY,
   date DATE NOT NULL,
-  category VARCHAR(30) NOT NULL CHECK (category IN ('bottles_purchase','petrol','maintenance','electricity','other')),
+  category VARCHAR(30) NOT NULL CHECK (category IN ('bottles_purchase','materials_purchase','petrol','maintenance','electricity','other')),
   amount DECIMAL(12,2) NOT NULL,
   description TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Manual corrections to bottle stock, per type/quality. This is how you enter the stock you
+-- already had before you started using the system (opening stock), or fix a count after a
+-- physical stock-take. quantity is signed: + adds to stock, - removes from stock.
+-- kind says which pile it applies to: 'empty' (empty bottles) or 'filled' (filled, ready to deliver).
+-- These never touch expenses or revenue - they only move the stock numbers.
+CREATE TABLE IF NOT EXISTS stock_adjustments (
+  id SERIAL PRIMARY KEY,
+  date DATE NOT NULL,
+  variant_id INTEGER NOT NULL REFERENCES bottle_variants(id),
+  kind VARCHAR(10) NOT NULL CHECK (kind IN ('empty','filled')),
+  quantity INTEGER NOT NULL,
+  notes TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Raw materials that are not bottles: PET sheets and labels (bought by weight, unit 'kg'),
+-- bottle caps (bought by count, unit 'pcs'). low_stock_threshold of 0 means "no warning".
+CREATE TABLE IF NOT EXISTS materials (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL UNIQUE,
+  unit VARCHAR(10) NOT NULL CHECK (unit IN ('kg','pcs')),
+  low_stock_threshold DECIMAL(12,3) NOT NULL DEFAULT 0,
+  active SMALLINT NOT NULL DEFAULT 1,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- expense_id links a purchase to the expense row it logged automatically, so deleting the
+-- purchase also removes that expense instead of leaving it behind.
+CREATE TABLE IF NOT EXISTS material_purchases (
+  id SERIAL PRIMARY KEY,
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  date DATE NOT NULL,
+  quantity DECIMAL(12,3) NOT NULL,
+  cost_total DECIMAL(12,2) NOT NULL DEFAULT 0,
+  supplier VARCHAR(255),
+  notes TEXT,
+  expense_id INTEGER REFERENCES expenses(id) ON DELETE SET NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Everything that changes a material's stock other than a purchase. quantity is signed:
+-- opening stock is +, used in production / wasted is -, a correction can be either.
+CREATE TABLE IF NOT EXISTS material_adjustments (
+  id SERIAL PRIMARY KEY,
+  material_id INTEGER NOT NULL REFERENCES materials(id),
+  date DATE NOT NULL,
+  reason VARCHAR(20) NOT NULL CHECK (reason IN ('opening','used','wasted','correction')),
+  quantity DECIMAL(12,3) NOT NULL,
+  notes TEXT,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

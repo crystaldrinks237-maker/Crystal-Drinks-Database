@@ -10,6 +10,7 @@ const { exportAllTablesAsJSON } = require('../lib/backup');
 const { activeVariants, allVariantsIncludingInactive, getProductionMap, saveAttendance, getSetting } = require('../lib/attendanceService');
 const { ensureAllVariantsExist } = require('../lib/migrate');
 const { round2, listCustomersWithBalances, getBalance, findCustomerByName } = require('../lib/customerService');
+const { round3, getBottleTotals, getVariantStockMap, getVariantStock, getMaterialsWithStock } = require('../lib/stockService');
 
 // A "pet" is a crate; how many bottles it holds depends on the type (bottle_types.bottles_per_pet).
 
@@ -40,17 +41,16 @@ function lastDayOfMonth(year, month) {
 // ---------- DASHBOARD ----------
 router.get('/', async (req, res, next) => {
   try {
-    const [[{ n: emptyPurchased }]] = await pool.query('SELECT COALESCE(SUM(quantity),0) AS n FROM empty_bottle_purchases');
-    const [[{ n: totalFilled }]] = await pool.query('SELECT COALESCE(SUM(bottles_filled),0) AS n FROM attendance');
-    const [[{ n: totalDelivered }]] = await pool.query('SELECT COALESCE(SUM(bottles_count),0) AS n FROM deliveries');
-
-    const emptyStock = emptyPurchased - totalFilled;
-    const filledStock = totalFilled - totalDelivered;
+    const { emptyStock, filledStock } = await getBottleTotals();
+    const materials = (await getMaterialsWithStock()).filter(m => m.active);
+    const lowMaterials = materials.filter(m => m.low);
 
     const [[{ n: totalRevenue }]] = await pool.query('SELECT COALESCE(SUM(total_amount),0) AS n FROM deliveries');
     const [[{ n: totalWages }]] = await pool.query('SELECT COALESCE(SUM(wage_amount),0) AS n FROM attendance');
+    // Every bottle and material purchase already logs its own expense row (see the purchase
+    // routes below), so this one total covers them. Adding the purchase tables' costs on top
+    // would count those purchases twice.
     const [[{ n: totalExpenses }]] = await pool.query('SELECT COALESCE(SUM(amount),0) AS n FROM expenses');
-    const [[{ n: totalBottleCost }]] = await pool.query('SELECT COALESCE(SUM(cost_total),0) AS n FROM empty_bottle_purchases');
 
     const today = todayStr();
     const [todaysAttendance] = await pool.query(
@@ -71,8 +71,9 @@ router.get('/', async (req, res, next) => {
       lowStockEmptyThreshold, lowStockFilledThreshold,
       lowEmpty: emptyStock < lowStockEmptyThreshold,
       lowFilled: filledStock < lowStockFilledThreshold,
-      totalRevenue, totalWages, totalExpenses, totalBottleCost,
-      netEstimate: totalRevenue - totalWages - totalExpenses - totalBottleCost,
+      materials, lowMaterials,
+      totalRevenue, totalWages, totalExpenses,
+      netEstimate: totalRevenue - totalWages - totalExpenses,
       todaysAttendance, recentDeliveries, today,
       totalOwed, owingCount: owing.length, topOwing: owing.slice(0, 5)
     });
@@ -235,27 +236,216 @@ router.get('/inventory', async (req, res, next) => {
       ORDER BY p.date DESC, p.id DESC
     `);
 
-    const [[{ n: emptyPurchased }]] = await pool.query('SELECT COALESCE(SUM(quantity),0) AS n FROM empty_bottle_purchases');
-    const [[{ n: totalFilled }]] = await pool.query('SELECT COALESCE(SUM(bottles_filled),0) AS n FROM attendance');
-    const [[{ n: totalDelivered }]] = await pool.query('SELECT COALESCE(SUM(bottles_count),0) AS n FROM deliveries');
+    const { emptyStock, filledStock } = await getBottleTotals();
 
     const allVariants = await allVariantsIncludingInactive();
-    const byVariant = [];
-    for (const v of allVariants) {
-      const [[{ n: purchased }]] = await pool.query('SELECT COALESCE(SUM(quantity),0) n FROM empty_bottle_purchases WHERE variant_id = ?', [v.id]);
-      const [[{ n: filled }]] = await pool.query('SELECT COALESCE(SUM(p.quantity),0) n FROM production p WHERE p.variant_id = ?', [v.id]);
-      const [[{ n: delivered }]] = await pool.query('SELECT COALESCE(SUM(di.quantity),0) n FROM delivery_items di WHERE di.variant_id = ?', [v.id]);
-      byVariant.push({ ...v, emptyStock: purchased - filled, filledStock: filled - delivered });
-    }
+    const stockMap = await getVariantStockMap();
+    const byVariant = allVariants.map(v => {
+      const s = stockMap[v.id] || { emptyStock: 0, filledStock: 0 };
+      return { ...v, emptyStock: s.emptyStock, filledStock: s.filledStock };
+    });
+
+    const [adjustments] = await pool.query(`
+      SELECT a.*, t.name AS type_name, q.name AS quality_name
+      FROM stock_adjustments a
+      JOIN bottle_variants v ON v.id = a.variant_id
+      JOIN bottle_types t ON t.id = v.type_id
+      JOIN bottle_qualities q ON q.id = v.quality_id
+      ORDER BY a.date DESC, a.id DESC
+    `);
+
+    const materials = await getMaterialsWithStock();
+    const [materialPurchases] = await pool.query(`
+      SELECT p.*, m.name AS material_name, m.unit
+      FROM material_purchases p JOIN materials m ON m.id = p.material_id
+      ORDER BY p.date DESC, p.id DESC
+    `);
+    const [materialAdjustments] = await pool.query(`
+      SELECT a.*, m.name AS material_name, m.unit
+      FROM material_adjustments a JOIN materials m ON m.id = a.material_id
+      ORDER BY a.date DESC, a.id DESC
+    `);
 
     res.render('admin/inventory', {
       user: req.session.user,
       purchases,
-      emptyStock: emptyPurchased - totalFilled,
-      filledStock: totalFilled - totalDelivered,
+      emptyStock, filledStock,
       byVariant,
-      variantsForPurchase: await activeVariants()
+      variantsForPurchase: await activeVariants(),
+      allVariants, adjustments,
+      materials, materialPurchases, materialAdjustments,
+      error: req.query.error || null
     });
+  } catch (err) { next(err); }
+});
+
+// ---------- INVENTORY: opening stock / stock-count corrections (bottles) ----------
+// Two ways to use the form:
+//   mode "add"    - add (or, with a minus sign, remove) a quantity. Used for the stock you
+//                   already had before the system was started, or to fix a small mistake.
+//   mode "set_to" - you type what is physically on the shelf now and the system works out the
+//                   difference itself and saves that as the adjustment. This is the one to use
+//                   to clear a negative number.
+// Either way the result is an adjustment row: it moves the stock number only, never money.
+router.post('/inventory/adjust', async (req, res, next) => {
+  try {
+    const { date, variant_id, kind, mode, quantity, notes } = req.body;
+    const variantId = parseInt(variant_id, 10);
+    const bottleKind = kind === 'filled' ? 'filled' : 'empty';
+    const entered = parseInt(quantity, 10);
+    if (!variantId || Number.isNaN(entered)) {
+      return res.redirect('/admin/inventory?error=' + encodeURIComponent('Pick a type/quality and enter a quantity.'));
+    }
+
+    let delta = entered;
+    let note = (notes || '').trim();
+    if (mode === 'set_to') {
+      if (entered < 0) {
+        return res.redirect('/admin/inventory?error=' + encodeURIComponent('The actual count cannot be negative.'));
+      }
+      const current = await getVariantStock(variantId);
+      const now = bottleKind === 'filled' ? current.filledStock : current.emptyStock;
+      delta = entered - now;
+      if (delta === 0) return res.redirect('/admin/inventory');
+      note = `Stock count: set to ${entered} (system showed ${now})` + (note ? ' - ' + note : '');
+    }
+
+    await pool.query(
+      'INSERT INTO stock_adjustments (date, variant_id, kind, quantity, notes) VALUES (?, ?, ?, ?, ?)',
+      [date || todayStr(), variantId, bottleKind, delta, note || null]
+    );
+    res.redirect('/admin/inventory');
+  } catch (err) { next(err); }
+});
+
+router.delete('/inventory/adjust/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM stock_adjustments WHERE id = ?', [req.params.id]);
+    res.redirect('/admin/inventory');
+  } catch (err) { next(err); }
+});
+
+// ---------- INVENTORY: raw materials (PET sheets, labels, bottle caps) ----------
+router.post('/inventory/materials', async (req, res, next) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    const unit = req.body.unit === 'pcs' ? 'pcs' : 'kg';
+    if (!name) return res.redirect('/admin/inventory?error=' + encodeURIComponent('Enter a name for the material.'));
+    await pool.query(
+      'INSERT INTO materials (name, unit, low_stock_threshold) VALUES (?, ?, ?)',
+      [name, unit, Math.max(0, round3(parseFloat(req.body.low_stock_threshold) || 0))]
+    );
+    res.redirect('/admin/inventory');
+  } catch (e) {
+    if (e.code === '23505') return res.redirect('/admin/inventory?error=' + encodeURIComponent('A material with that name already exists.'));
+    next(e);
+  }
+});
+
+router.post('/inventory/materials/:id/update', async (req, res, next) => {
+  try {
+    const name = String(req.body.name || '').trim();
+    if (!name) return res.redirect('/admin/inventory?error=' + encodeURIComponent('A material needs a name.'));
+    await pool.query(
+      'UPDATE materials SET name = ?, low_stock_threshold = ?, active = ? WHERE id = ?',
+      [name, Math.max(0, round3(parseFloat(req.body.low_stock_threshold) || 0)), req.body.active ? 1 : 0, req.params.id]
+    );
+    res.redirect('/admin/inventory');
+  } catch (e) {
+    if (e.code === '23505') return res.redirect('/admin/inventory?error=' + encodeURIComponent('A material with that name already exists.'));
+    next(e);
+  }
+});
+
+// Buying material: adds to stock and logs the cost as an expense (category materials_purchase),
+// the same way empty-bottle purchases do. Both rows are saved together or not at all.
+router.post('/inventory/materials/purchase', async (req, res, next) => {
+  try {
+    const { date, material_id, quantity, cost_total, supplier, notes } = req.body;
+    const qty = round3(parseFloat(quantity));
+    const cost = round2(parseFloat(cost_total) || 0);
+    if (!parseInt(material_id, 10) || !(qty > 0)) {
+      return res.redirect('/admin/inventory?error=' + encodeURIComponent('Pick a material and enter a quantity above zero.'));
+    }
+    await pool.transaction(async (q) => {
+      const [found] = await q('SELECT name, unit FROM materials WHERE id = ?', [parseInt(material_id, 10)]);
+      if (!found[0]) throw new Error('Material not found');
+      const m = found[0];
+      const [exp] = await q(
+        `INSERT INTO expenses (date, category, amount, description) VALUES (?, 'materials_purchase', ?, ?) RETURNING id`,
+        [date, cost, `Purchased ${qty} ${m.unit} ${m.name}${supplier ? ' from ' + supplier : ''}`]
+      );
+      await q(
+        `INSERT INTO material_purchases (material_id, date, quantity, cost_total, supplier, notes, expense_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [parseInt(material_id, 10), date, qty, cost, supplier || null, notes || null, exp[0].id]
+      );
+    });
+    res.redirect('/admin/inventory');
+  } catch (err) { next(err); }
+});
+
+// Deleting a purchase also removes the expense it logged (they are linked), so the cost
+// does not stay behind in Expenses after the stock is gone.
+router.delete('/inventory/materials/purchase/:id', async (req, res, next) => {
+  try {
+    await pool.transaction(async (q) => {
+      const [rows] = await q('SELECT expense_id FROM material_purchases WHERE id = ?', [req.params.id]);
+      await q('DELETE FROM material_purchases WHERE id = ?', [req.params.id]);
+      if (rows[0] && rows[0].expense_id) await q('DELETE FROM expenses WHERE id = ?', [rows[0].expense_id]);
+    });
+    res.redirect('/admin/inventory');
+  } catch (err) { next(err); }
+});
+
+// Opening stock, used in production, wasted, or a correction. The person picks the reason and
+// types a plain positive number; the sign is worked out here, so "used 25" can't be saved as +25
+// by mistake. Only "correction" takes a sign from what was typed.
+router.post('/inventory/materials/adjust', async (req, res, next) => {
+  try {
+    const { date, material_id, reason, quantity, notes } = req.body;
+    const typed = round3(parseFloat(quantity));
+    const why = ['opening', 'used', 'wasted', 'correction'].includes(reason) ? reason : 'used';
+    if (!parseInt(material_id, 10) || Number.isNaN(typed) || typed === 0) {
+      return res.redirect('/admin/inventory?error=' + encodeURIComponent('Pick a material and enter a quantity.'));
+    }
+    let signed = typed;
+    if (why === 'opening') signed = Math.abs(typed);
+    else if (why === 'used' || why === 'wasted') signed = -Math.abs(typed);
+    await pool.query(
+      'INSERT INTO material_adjustments (material_id, date, reason, quantity, notes) VALUES (?, ?, ?, ?, ?)',
+      [parseInt(material_id, 10), date || todayStr(), why, signed, (notes || '').trim() || null]
+    );
+    res.redirect('/admin/inventory');
+  } catch (err) { next(err); }
+});
+
+router.delete('/inventory/materials/adjust/:id', async (req, res, next) => {
+  try {
+    await pool.query('DELETE FROM material_adjustments WHERE id = ?', [req.params.id]);
+    res.redirect('/admin/inventory');
+  } catch (err) { next(err); }
+});
+
+router.get('/inventory/materials/export.csv', async (req, res, next) => {
+  try {
+    const [rows] = await pool.query(`
+      SELECT p.date, m.name AS material, m.unit, p.quantity, p.cost_total, p.supplier, p.notes
+      FROM material_purchases p JOIN materials m ON m.id = p.material_id
+      ORDER BY p.date DESC, p.id DESC
+    `);
+    const csv = toCSV(rows, [
+      { key: 'date', label: 'Date' },
+      { key: 'material', label: 'Material' },
+      { key: 'unit', label: 'Unit' },
+      { key: 'quantity', label: 'Quantity' },
+      { key: 'cost_total', label: 'Cost Total' },
+      { key: 'supplier', label: 'Supplier' },
+      { key: 'notes', label: 'Notes' }
+    ]);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="material-purchases.csv"');
+    res.send(csv);
   } catch (err) { next(err); }
 });
 
@@ -680,6 +870,7 @@ router.get('/reports', async (req, res, next) => {
         UNION SELECT date FROM deliveries
         UNION SELECT date FROM expenses
         UNION SELECT date FROM empty_bottle_purchases
+        UNION SELECT date FROM material_purchases
       ) AS combined
       ORDER BY ym DESC
     `);
@@ -711,11 +902,9 @@ router.get('/reports/:year/:month/pdf', async (req, res, next) => {
     const emptyBottlesPurchased = await one(`SELECT COALESCE(SUM(quantity),0) n FROM empty_bottle_purchases WHERE date BETWEEN ? AND ?`, [monthStart, monthEnd]);
     const deliveryCount = await one(`SELECT COUNT(*) n FROM deliveries WHERE date BETWEEN ? AND ?`, [monthStart, monthEnd]);
 
-    const emptyPurchasedAllTime = await one('SELECT COALESCE(SUM(quantity),0) n FROM empty_bottle_purchases', []);
-    const filledAllTime = await one('SELECT COALESCE(SUM(bottles_filled),0) n FROM attendance', []);
-    const deliveredAllTime = await one('SELECT COALESCE(SUM(bottles_count),0) n FROM deliveries', []);
-    const emptyStockNow = emptyPurchasedAllTime - filledAllTime;
-    const filledStockNow = filledAllTime - deliveredAllTime;
+    const materialsCost = await one(`SELECT COALESCE(SUM(cost_total),0) n FROM material_purchases WHERE date BETWEEN ? AND ?`, [monthStart, monthEnd]);
+    const { emptyStock: emptyStockNow, filledStock: filledStockNow } = await getBottleTotals();
+    const materials = (await getMaterialsWithStock()).filter(m => m.active);
 
     const [workers] = await pool.query(`
       SELECT u.name,
@@ -752,7 +941,7 @@ router.get('/reports/:year/:month/pdf', async (req, res, next) => {
       company: await getCompany(),
       monthLabel,
       data: {
-        revenue, wages, bottleCost, petrol, maintenance, electricity, otherExpenses,
+        revenue, wages, bottleCost, materialsCost, petrol, maintenance, electricity, otherExpenses, materials,
         bottlesFilled, bottlesDelivered, emptyBottlesPurchased, deliveryCount,
         emptyStockNow, filledStockNow, workers, topClients, byVariant
       }

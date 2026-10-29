@@ -14,7 +14,7 @@
 
   <div class="card">
     <h2>Add expense</h2>
-    <p class="muted" style="margin-top:-6px">Bottle purchases and delivery petrol are logged automatically from Inventory / Deliveries. Use this for maintenance, electricity, or anything else.</p>
+    <p class="muted" style="margin-top:-6px">Bottle purchases, PET sheet / label / cap purchases and delivery petrol are logged automatically from Inventory / Deliveries. Use this for maintenance, electricity, or anything else.</p>
     <form method="POST" action="/admin/expenses">
       <div class="row">
         <div class="field">
@@ -28,6 +28,7 @@
             <option value="electricity">Electricity bill</option>
             <option value="petrol">Petrol (general)</option>
             <option value="bottles_purchase">Bottle purchase (manual)</option>
+            <option value="materials_purchase">PET sheets / labels / caps (manual)</option>
             <option value="other">Other</option>
           </select>
         </div>
